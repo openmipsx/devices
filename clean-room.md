@@ -97,7 +97,8 @@ moved from `~/src/home/` and `~/src/` to `~/src/mipsx/`. On 2026-10-28 the
 specs and photos were published in this repository: `docs/spec/` became
 `common/` and `spa3000/`, `docs/photos/` became `spa3000/photos/` (with
 photo metadata removed), and `docs/plan/open-source-stack.md` moved to the
-organisation's `.github` repository.
+organisation's `.github` repository. Later that day `~/src/mipsx/` was renamed
+`~/src/openmipsx/`.
 
 | Date | Who | Source examined | Method | Output |
 |---|---|---|---|---|
