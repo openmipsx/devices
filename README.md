@@ -33,6 +33,10 @@ they were derived from are not published. See
 Linksys, Cisco and Sipura are trademarks of their owners. This project is
 not affiliated with or endorsed by them.
 
+## Licence
+
+Licensed under the Apache License 2.0; see [`LICENSE`](LICENSE).
+
 ## Related
 
 - [openmipsx/mipsx-sdk](https://github.com/openmipsx/mipsx-sdk): ABI,
