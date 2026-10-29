@@ -11,6 +11,10 @@ Each fact is marked:
   lengths add up, streams decompress).
 - **Observed**: the value is in the image, but its meaning is unknown or
   inferred.
+- **Simulated**: established by running vendor code on the openmipsx
+  simulator, with the result checked against an independent oracle (zlib,
+  a reference MD5) or against which section starts. It holds as far as
+  the simulator is right; see the clean-room log, 2026-10-29.
 - **Hypothesis**: a plausible explanation that has not been confirmed.
 
 All multi-byte integers are **big-endian** unless stated otherwise. Offsets
@@ -144,7 +148,7 @@ The directory sits at the offset given in header field 0x04 and holds
 | 0x07 | Word address: 0x00016D34 (A), 0x00014000 (B) | Varies | Varies | 0 | Initial value of register r23, the code base register used for calls and far jumps. It equals the word address of the first code stream plus 0x10000. **Not the entry point.** | **Verified** for A; B fits the same rule (Observed) |
 | 0x05 | Word address: 0x0004BC00 (A only) | Varies | Varies | 0 | Initial value of r24, a second code base register. It equals the word address of the second code stream (byte 0xEF000) plus 0x10000. | **Verified** |
 | 0x06 | 0x00010000 (A only) | Varies | Varies | 0 | Probably the initial value of r25 | Hypothesis |
-| 0x03 | 0x400070A6 (A), 0x4000CB6A (B) | Varies | Varies | 0 | Entry point; always the last record. Bits 29–0 are a **word** address (A: 0x70A6, byte 0x1C298; B: 0xCB6A, byte 0x32DA8). Bit 30 is a flag of unknown meaning. | A: **Observed** (the address follows a return and, in the first instructions, sets the stack pointer from memory before jumping into the application). B: Hypothesis, by the same rule. |
+| 0x03 | 0x400070A6 (A), 0x4000CB6A (B) | Varies | Varies | 0 | Entry point; always the last record. Bits 29–0 are a **word** address (A: 0x70A6, byte 0x1C298; B: 0xCB6A, byte 0x32DA8). Bit 30 does not change where execution starts, because jump targets are taken modulo 2³⁰ words (Simulated; [`processor-es3890.md`](processor-es3890.md) §6). Whether anything else reads it is unknown. | A: **Observed** (the address follows a return and, in the first instructions, sets the stack pointer from memory before jumping into the application). B: Hypothesis, by the same rule. |
 
 Code addresses in the directory and in the processor are word addresses
 (byte address = word address × 4); see [`processor-es3890.md`](processor-es3890.md)
@@ -169,6 +173,11 @@ firmware can provide its own loader, and need not use the service (§4.6).
 
 On type 0x03 (entry) the loader jumps to the entry word address with r4
 holding the address of the section's packed header (Observed).
+
+The loader stub itself expects the address of its section's packed header
+(§4.1) in r9 when it is started: without it, it walks a directory at
+address 0 (Simulated, Medium confidence; that this is the boot selector's
+convention is inferred).
 
 ### 4.6 Decompression service in the boot section
 
@@ -199,6 +208,10 @@ C data offset 0x0380 when section C sits at the top of the flash window
 | r19 | 0x00187FF0 |
 | r29 | 0x001EFFF0 (stack pointer) |
 | r31 | Return address (the call is a `jspci` through the code word address) |
+
+These entry values are enough. Called with just them from a minimal
+harness, the service decompresses all 8 type 0x10 streams of sections A
+and B of 3.1.20(GW) to output identical to zlib's (**Simulated**).
 
 The loader keeps its own state in RAM at byte addresses 0x0C–0x33 across
 the call (it saves registers there), so the service must not use that
@@ -422,11 +435,14 @@ Section C sits at the top of the flash window, with its data at
   which is exactly section C data offset 0x380 at that placement (§4.6),
   and the code there executes in place.
 - The loader stub, when run as section C's own, reads the word at
-  0x1CFEFFFC and subtracts it from 0x0D000000 to find its packed header.
+  0x1CFFFFFC and subtracts it from 0x0D000000 to find its packed header.
   Section C's last word is 0x25F8, the embedded program's length, and
   0x0D000000 − 0x25F8 is exactly where the embedded program starts at
-  this placement (Observed arithmetic; why the read uses 0x1CFEFFFC rather
-  than 0x0CFFFFFC is not known, perhaps an alias).
+  this placement (Observed arithmetic). 0x1CFFFFFC is 0x0CFFFFFC, the
+  last word of the flash window, with address bit 28 set (Hypothesis,
+  strongly supported: served there, the word makes the stub start the
+  embedded program correctly in simulation). Earlier versions gave
+  0x1CFEFFFC, from reading the 17-bit offset 0xFFFC as negative.
 - The boot selector's scans cover 15 slots from 0x0C000000 (§5 below),
   which leaves out the sixteenth 64 KB sector, 0x0C0F0000.
 
@@ -484,6 +500,14 @@ check word is 0xFFFFFFFF (so the check word is presumably the complement).
 5. The MD5 of the data (at entry + field 0x0C, for the field 0x20 length)
    must equal the digest at 0x10.
 
+Simulated: run black-box on flash images built from this section, the
+selector accepts a good section and rejects one with a flipped data bit,
+a wrong stored digest, a wrong entry sum, a wrong type or a length of
+0x100000. Its MD5 agrees with a reference implementation. A section
+with one tag byte changed (sum fixed) was **not** rejected, which
+disagrees with step 2. Sections whose length was not a multiple of 4
+were never started (see §6).
+
 **Order.**
 
 1. Check `SIPURA *` at both boot-record blocks, 0x0C000000 and
@@ -498,6 +522,23 @@ check word is 0xFFFFFFFF (so the check word is presumably the complement).
 5. If nothing is found: initialise peripherals through base register r27
    (offsets 0x4000–0x8630) and loop forever. No serial or network recovery
    was seen on this path.
+
+**Simulation disagrees with steps 2–3 (unresolved).** Run black-box,
+the selector did not behave as the order above says:
+
+- With no boot record and a valid section of each type, it checked both
+  and started **type 2**, not type 1.
+- When the type 2 section failed any check (sum, MD5, type, length, or
+  an erased entry with its data left in place), the valid type 1 section
+  was **not** started, with or without a boot record, even though its
+  MD5 was computed and passed. The selector went to step 5. The type 1
+  section was started only when the type 2 area was erased flash.
+
+It is not known yet whether the order above or the simulation is wrong:
+the selector's control logic runs a few instructions that the
+decompression service and the MD5 code do not. Until the decompilation
+is re-read against these cases, treat the fallback to section B as
+**unconfirmed** (Q7).
 
 Where the boot records come from: the image itself contains no
 `SIPURA *` record. Sections A and B write them when they install an
@@ -567,9 +608,14 @@ To produce an image the device might accept, a writer would:
    0x200.
 
 The bootloader checks each section's type, tag, entry byte sum, length
-and MD5 (§5, Section C); whether anything checks the global header MD5
-at boot is not known. It falls back to another valid section in flash if
-the preferred one fails, but if none is valid it stops (Q7). **Do not flash an
+and MD5 (§5, Section C). It does not check the global header MD5 in the
+boot block's header copy (Simulated); whether anything else checks it at
+boot is not known. Keep each section's data length a multiple of 4: in
+simulation the boot selector never started a section of any other length
+(Simulated, Medium; every vendor section already is). The decompiled
+boot selector falls back to another valid section in flash if the
+preferred one fails, but a simulation of it did not (§5, Section C,
+Order), and if none is valid it stops (Q7). **Do not flash an
 experimental image until the recovery question (Q7) is answered**, and
 keep a valid section of the other type in flash.
 
@@ -741,6 +787,6 @@ are being built from the instruction set manual in openmipsx's
 | Q4 | Directory type 0x10, word 3 (the other record types are resolved, see §4.4). Values (0x1472, 0xC46, 0xD1D0, 0xCAAB, 0x16EA, 0x35A8, 0x4EB8, 0x2B1) are not the 16-bit byte sum or either half of the CRC-32 of the uncompressed data. | Possibly a checksum the loader checks. |
 | Q5 | Does the loader ignore the "Varies" words in non-stream directory records? | Generator correctness. |
 | Q6 | Section C's embedded program is the boot selector: it checks and starts a type 2 or type 1 section from flash at 0x0C000000 (§5). The code at 0x0380 is the decompression service of §4.6. Sections A and B both write the boot records into flash sectors 0 and 1, with identical code; the +0x08 word is a sequence number increased on every write. Section A writes type 0 sections at flash 0xF2000, which confirms section C's placement. What section B does when started is in §5. All of these are answered. Still open: what runs before the boot selector; whether flash really repeats through the window (the boot selector's 0x0CFF2400 against flash offset 0xF2400); and the meaning of the record's +0x10 and +0x14 halfwords. | Boot chain and recovery. |
-| Q7 | Mostly answered. Section B is a recovery image (§5, Section B). If the application fails its checks, the boot selector falls back to section B. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
+| Q7 | Mostly answered. Section B is a recovery image (§5, Section B). From the decompilation, if the application fails its checks, the boot selector falls back to section B. **A simulation of the boot selector did not fall back** (§5, Section C, Order), so this is unconfirmed until that is resolved. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
 | Q8 | Is the format the same in other firmware versions? | Only 3.1.20(GW) has been examined. |
-| Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: what is bit 30 of the entry record, and is type 0x06 really r25? | Load map correctness; whether they are second-core code, data or something else. |
+| Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: is type 0x06 really r25? Bit 30 of the entry record is partly answered: the jump ignores it (§4.4), but whether anything else reads it is unknown. | Load map correctness; whether they are second-core code, data or something else. |
