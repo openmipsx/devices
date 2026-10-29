@@ -1,8 +1,8 @@
 # SPA3000 hardware
 
 Status: draft, from photos of both sides of one board and the case
-(2026-10-27) and continuity tests on the unpowered board (2026-10-28).
-Clean-side document: chip markings and public datasheets
+(2026-10-27), continuity tests on the unpowered board (2026-10-28), and DC
+voltages on the powered board running the stock firmware (2026-10-28). Clean-side document: chip markings and public datasheets
 only. See [`../clean-room.md`](../clean-room.md) for the process.
 
 Each fact is marked:
@@ -48,6 +48,7 @@ Public source code used:
 |---|---|---|
 | Board name | `Q3000 REV F` | Read |
 | PCB flammability rating | 94V-0, maker's mark "TJ-1" | Read |
+| Versions reported by the stock web UI (Info page, 2026-10-28) | Software 3.1.20(GW), the version the format spec was written from; hardware 3.3.1(1448); client certificate installed; customization Open (not provider-locked) | Observed |
 | Enclosure | Two-part grey plastic case. The board is held by screws through mounting holes (M2 at the lower-left corner, and one at the left edge). | Read (from photos) |
 | Power input | DC 5 V, centre positive | Read (case label and polarity symbol) |
 | Rear ports, left to right seen from behind | LINE (RJ11, FXO), PHONE (RJ11, FXS), INTERNET (RJ45), power jack | Read (case label) |
@@ -56,7 +57,8 @@ Public source code used:
 | Front panel | Four light windows, left to right seen from the front: Power (⏻ symbol), INTERNET, PHONE, LINE | Read (case label) |
 | LED positions | Left to right seen from the front: D1 (Power), D4 (INTERNET), D8 (PHONE), D7 (LINE). R20 sits beside D1 and R79 beside D4; D8 and D7 have no resistor beside them. | Read (from a photo with the board above the case) |
 | LED wiring | D4, D7 and D8 share one trace on their board-edge side, which is their anode side; with the board unpowered, diode-testing any one of them lights all three at about 1.8 V. D1 (Power) is not on that trace: it reads 1.2 V one way and 0.9 V the other and does not light, so something conducts in parallel with it. | Measured |
-| Test points | TP2, TP3, TP4, TP6 and T1 (plated holes) | Read; function unknown |
+| Test points | TP2, TP3, TP6 and T1 are plated holes. TP4's label is above the top-left corner of the RTL8019AS, with no hole beside it; not yet probed. A small pad labelled `TWS` (the name of ES3890F pin 59, §2.5) is below TP4, beside C73. | Read |
+| Test point voltages, powered and idle (no call), to REG2 pin 1 | TP2 0.11 V, TP3 0.95 V, TP6 0 V, T1 0 V, all steady. TP2 and T1 are beside the LINE jack, TP3 beside the Si3210 and TP6 beside the Si3050. None sits at a logic-high level, so none looks like an idle serial transmit line; TP2 and TP3 look like analog nodes in the line circuits. `TWS` pad 2.46 V, steady: held high, not a running word-select clock (which would average about half the rail). | Measured (powered); roles Hypothesis |
 
 ## 2. Main components
 
@@ -70,7 +72,7 @@ Public source code used:
 | U13 (underside) | `SAMSUNG` `K4S161622…-TC60` (partly legible) | Samsung K4S161622-series SDRAM: 16 Mbit (2 MB), 16-bit wide, 50-pin TSOP-II; the -60 speed grade is 166 MHz | Main RAM. 2 MB matches the 0x001FFFF0 value in the firmware spec's packed-section header (§4.1), which looks like a stack pointer at the top of RAM. | Read (partial); size Datasheet |
 | U6 (underside) | ST `74HC32` | Quad 2-input OR gate | Glue logic. Hypothesis: combines bus strobes and chip selects for the Ethernet chip or flash. | Read; role Hypothesis |
 | U10 (underside) | ST `74HC74` | Dual D flip-flop | Glue logic. Hypothesis: clock division or bus timing for the Ethernet chip. | Read; role Hypothesis |
-| U2 | Unpopulated footprint: two rows of 18 plated, tinned holes (36 in all). Pitch 2.54 mm, scaled from the HC-49/US body of Y1 (17 pitches = 43.2 mm). Pin 1 is the square pad at the top-row end nearest R6 and the M2 mounting hole. On the top side, a fan of about 15 parallel traces runs straight from the ES3890F's nearer pin row into the U2 pads, with no series resistors; a few more go to the R6–R9 group (R7 and R8 marked `472`, 4.7 kΩ; R9 marked `201`, 200 Ω). On the underside, the flash's bus traces run past U2 towards the CPU and do not visibly enter its pads. The ES3890F edge that faces U2 is pins 39–64 (§2.5). | — | Hypothesis: a development port wired straight to ES3890F pins 39–64: address lines, the CD-ROM serial input and the audio serial output (§2.5). The general-purpose AUX pins are mostly on the far edge, so a serial console, if any, is less likely to be on U2 than first thought. Inner layers cannot be seen. | Read (from photos); role Hypothesis |
+| U2 | Unpopulated footprint: two rows of 18 plated, tinned holes (36 in all). Pitch 2.54 mm, scaled from the HC-49/US body of Y1 (17 pitches = 43.2 mm). Pin 1 is the square pad at the top-row end nearest R6 and the M2 mounting hole. On the top side, a fan of about 15 parallel traces runs straight from the ES3890F's nearer pin row into the U2 pads, with no series resistors; a few more go to the R6–R9 group (R7 and R8 marked `472`, 4.7 kΩ; R9 marked `201`, 200 Ω). On the underside, the flash's bus traces run past U2 towards the CPU and do not visibly enter its pads. The ES3890F edge that faces U2 is pins 39–64 (§2.5). | — | U2 carries the 5 V input, so it is a connector, not an alternative memory footprint (Measured, see below). Hypothesis: a development port wired straight to ES3890F pins 39–64: address lines, the CD-ROM serial input and the audio serial output (§2.5). The general-purpose AUX pins are mostly on the far edge, so a serial console, if any, is less likely to be on U2 than first thought. Inner layers cannot be seen. Powered and idle, to REG2 pin 1, numbering each row 1–18 from the square-pad end (the square pad is inner 1; the inner row is nearer the CPU): inner 1 0.2 V and changing (an active signal, mostly low); inner 2 3.05 V steady (probably pulled up); outer 1 4.9 V steady (the 5 V input); outer 2 0.13 V steady. Positions 3–18 of both rows not yet measured. | Read (from photos); 5 V pin and voltages Measured (powered); role Hypothesis |
 
 ### 2.2 Ethernet
 
@@ -97,8 +99,8 @@ Public source code used:
 
 | Ref | Marking | Part | Role | Status |
 |---|---|---|---|---|
-| REG2 | `AS1117L-33` | AS1117 3.3 V low-dropout regulator, SOT-223 | 3.3 V rail from the 5 V input, for the flash, RAM and logic | Read; role Hypothesis |
-| REG1 | `1117C` `38 ADC` | 1117-family low-dropout regulator, SOT-223. The output voltage is not clear from the marking ("38" may be a date or lot code). | Hypothesis: the ES3890F's 2.5 V core, PLL and video DAC rail (§2.5) | Read; voltage unknown |
+| REG2 | `AS1117L-33` | AS1117 3.3 V low-dropout regulator, SOT-223 | 3.3 V rail from the 5 V input, for the flash, RAM and logic. Powered: 3.4 V out, 4.9 V in. Pin 1 is ground; with the marking upright and the legs nearest, pins 1, 2, 3 run left to right, and the tab is the output. | Read; voltages Measured (powered); loads Hypothesis |
+| REG1 | `1117C` `38 ADC` | Adjustable 1117-family low-dropout regulator, SOT-223. Powered: 2.53 V out (tab), 4.9 V in (pin 3), 1.27 V on the adjust pin (pin 1). Output minus adjust is 1.26 V, the 1117's reference, so it is the adjustable version, set to 2.5 V by two resistors; "38" is not a voltage. It runs from the 5 V input, not the 3.3 V rail. | Hypothesis: the ES3890F's 2.5 V core, PLL and video DAC rail (§2.5). To confirm, check continuity from REG1's tab to ES3890F VCC pins with the board unpowered. | Read; voltages Measured (powered); load Hypothesis |
 
 ### 2.5 ES3890F pins
 
@@ -196,10 +198,10 @@ source** for the PAP2, unless marked otherwise.
 
 | # | Question | How to answer |
 |---|---|---|
-| H1 | Is there a serial console? No 3- or 4-pin header was found. The candidates are U2, TP2, TP3, TP4, TP6 and T1. | Probe with a scope or logic analyser at boot, looking for UART-like bursts at common baud rates |
-| H2 | What is the U2 footprint? Bus connector, debug port or alternative memory? It faces ES3890F pins 39–64 (§2.5). | Use a continuity tester between U2 pins and ES3890F pins 39–64 first, then the flash and RTL8019AS pins |
+| H1 | Is there a serial console? No 3- or 4-pin header was found. TP2, TP3, TP6 and T1 sit in the telephony area and none idles high (§1), so U2 is the main candidate left; TP4 is unprobed. | Probe with a scope or logic analyser at boot, looking for UART-like bursts at common baud rates |
+| H2 | What is the U2 footprint? It carries 5 V (outer 1), so it is a connector of some kind, not alternative memory. It faces ES3890F pins 39–64 (§2.5). Next: finish the powered voltages for positions 3–18 of both rows (§2.1). | Use a continuity tester between U2 pins and ES3890F pins 39–64 first, then the flash and RTL8019AS pins |
 | H3 | How are the SLIC, DAA and Ethernet wired to the ES3890F (bus, chip selects, interrupts, PCM)? On the PAP2 the RTL8019AS is on CS1# (pin 19) and the 8-bit data bus (§2.6). | Trace the board, or probe with a logic analyser; check the PAP2 wiring first |
 | H4 | GPIOs for the LEDs, the reset button and relay K1. On the PAP2 the LEDs are on AUX1[4–7], pins 112–115 (§2.6). | Continuity from each LED's resistor to pins 112–115 first; otherwise trace the board, or probe while the original firmware runs |
 | H5 | Is there a reset button? None is fitted. A small two-hole footprint above U2 (next to C73) may be an unfitted switch. Hypothesis: factory reset is done only from the phone menu (IVR), as the public administration guide describes for SPA devices. | Check the footprint's label and traces; check the administration guide |
-| H6 | REG1's output voltage (2.5 V expected, §2.5), and the full marking of U13 | Measure REG1's output with a multimeter while powered; clearer photo of U13 |
+| H6 | The full marking of U13. REG1's output is now measured: 2.5 V, adjustable (§2.4). Still to confirm that it feeds the ES3890F's VCC pins. | Clearer photo of U13; continuity from REG1's tab to ES3890F pin 29 or 95, unpowered |
 | H7 | Can the flash be read in circuit, to back up the original contents before any experiment? | Check whether a TSOP clip fits, or desolder. This would produce dirty-side material, so do it on the dirty side. |
