@@ -34,9 +34,12 @@ Photos are in [`photos/`](photos/):
 | `20261029-SPA3000-Underside-Glue-Logic-Closeup.jpg` | Underside: U13, U3, U6, U10 and the parts around them |
 | `20261029-SPA3000-Underside-DAA-Closeup.jpg` | Underside, right side: L7–L10, Q4–Q9, Q26, Z1 and the large resistors |
 
-`20261029-SPA3000-Board-Map.svg` (and `.png`) beside this file is a
-cartoon map of both sides, drawn from these photos, for finding parts.
-Positions are approximate.
+A cartoon map of both sides, drawn from these photos, for finding parts.
+Positions are approximate. Source:
+[`20261029-SPA3000-Board-Map.svg`](20261029-SPA3000-Board-Map.svg) (a
+PNG copy is beside it).
+
+![SPA3000 board map: top side with the rear ports at the top, and the underside flipped front-over-rear, colour-coded by function](20261029-SPA3000-Board-Map.svg)
 
 Public datasheets used:
 
