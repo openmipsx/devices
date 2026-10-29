@@ -94,7 +94,7 @@ Public source code used:
 
 | Ref | Marking | Part | Role | Status |
 |---|---|---|---|---|
-| — | Realtek `RTL8019AS` `7526954` `L721F TAIWAN` | Realtek RTL8019AS | Ethernet controller: 10 Mbit/s only, NE2000-compatible register set, ISA-style 8/16-bit bus, 100-pin PQFP | Read; role Datasheet |
+| — | Realtek `RTL8019AS` `7526954` `L721F TAIWAN` | Realtek RTL8019AS | Ethernet controller: 10 Mbit/s only, NE2000-compatible register set, ISA-style 8/16-bit bus, 100-pin PQFP. Pin 1 is at the corner nearest both the ES3890F and U2: a larger silkscreen dot sits beside it, with smaller tick marks every five pins, and the package's own pin-1 dimple is in that corner. Counting anticlockwise, pins 1–30 should run along the long edge facing the ES3890F, 31–50 along the short edge facing the PHONE side, 51–80 along the long edge facing the JXD, and 81–100 along the short edge facing U2 (assumes 30 and 20 pins per edge, to check against the datasheet). | Read; role Datasheet; pin 1 Read (2026-10-29); numbering Hypothesis |
 | Y2 | `20R000` | 20.000 MHz crystal | RTL8019AS reference clock (the datasheet calls for 20 MHz) | Read |
 | — | `JXD 1531H` `TF-1606DG` | JXD TF-1606DG | 10Base-T magnetics (isolation transformers and filters) between the RTL8019AS and the RJ45 | Read; role Hypothesis |
 | — (underside, in front of the RJ45) | — | Two rows of six through-hole pins, each row in two groups of three, with one square pad at the U2 end of the row nearer the front. C23, C24 and C72 sit between the rows. | Hypothesis: the JXD TF-1606DG's pins, from their position under it | Read (close-up, 2026-10-29); identity Hypothesis |
