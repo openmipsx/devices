@@ -465,7 +465,7 @@ Boot parameters, read from the range filled by the 0x01 record:
 | Address | Value | Use |
 |---|---|---|
 | 0x15C, 0x160, 0x164 | Pointers to the type 0, 1 and 2 tags: 0xC6F4B6AF, 0xB8B4D4AD, 0xCACAD3C3 | Compared with entry field 0x04 (§3) |
-| 0x16C | 0x000FFFFF | Largest accepted section length |
+| 0x168, 0x16C | 0x000FFFFF, 0x000FFFFF | Largest accepted section length: 0x168 for a section reached through the boot record, 0x16C for one found by the scan |
 | 0x170–0x17C | 0x0C000000 and 0x0C010000, each twice | The two boot-record blocks |
 | 0x188, 0x18C | 0x0C000000, step 0x10000 | Type 1 scan: start and step |
 | 0x194, 0x198 | 0x0C000000, step 0x10000 | Type 2 scan: start and step |
@@ -493,10 +493,13 @@ check word is 0xFFFFFFFF (so the check word is presumably the complement).
 **Section check.** At a section table entry (§3) in flash:
 
 1. The type byte at 0x08 must be the wanted type.
-2. If the type's tag in the parameters is not empty, entry field 0x04 must
-   match it.
+2. Only for a section found by the scan (Order step 3), not for one
+   reached through a boot-record slot: if the type's tag in the
+   parameters is not empty, entry field 0x04 must match it, comparing up
+   to 4 bytes and stopping early at a zero byte of the tag.
 3. The word at 0x7C must equal the sum of entry bytes 0x00–0x7B.
-4. The length at 0x20 must be at most 0xFFFFF.
+4. The length at 0x20 must be at most 0xFFFFF (parameter 0x168 for a
+   slot, 0x16C for the scan; both hold 0xFFFFF).
 5. The MD5 of the data (at entry + field 0x0C, for the field 0x20 length)
    must equal the digest at 0x10.
 
@@ -504,9 +507,9 @@ Simulated: run black-box on flash images built from this section, the
 selector accepts a good section and rejects one with a flipped data bit,
 a wrong stored digest, a wrong entry sum, a wrong type or a length of
 0x100000. Its MD5 agrees with a reference implementation. A section
-with one tag byte changed (sum fixed) was **not** rejected, which
-disagrees with step 2. Sections whose length was not a multiple of 4
-were never started (see §6).
+with one tag byte changed (sum fixed) is rejected when it is found by
+the scan and accepted when it is reached through the boot record, as
+step 2 says; this holds for both types.
 
 **Order.**
 
@@ -516,29 +519,28 @@ were never started (see §6).
 2. If there is one: try its type 2 slot, then its type 1 slot.
 3. Otherwise, or if both slots fail: scan 15 positions from 0x0C000000 in
    steps of 0x10000 for a valid type 1 section, then the same for type 2.
-4. Jump to: data start + packed header field 0x14 (data length − 0x10).
-   In sections A and B, that word is a branch back into the loader stub
-   (§4.5), so this is how the stub starts (Verified for A and B).
+   The first section that passes is used. So with no boot record, a valid
+   type 1 section at a scanned position wins over any type 2 section.
+4. Mask the data start with 0x0FFFFFFF, then jump to: data start + packed
+   header field 0x14 (data length − 0x10). In sections A and B, that word
+   is a branch back into the loader stub (§4.5), so this is how the stub
+   starts (Verified for A and B). If that address is not a multiple of 4,
+   the selector goes straight to step 5, without trying the remaining
+   candidates.
 5. If nothing is found: initialise peripherals through base register r27
    (offsets 0x4000–0x8630) and loop forever. No serial or network recovery
    was seen on this path.
 
-**Simulation disagrees with steps 2–3 (unresolved).** Run black-box,
-the selector did not behave as the order above says:
-
-- With no boot record and a valid section of each type, it checked both
-  and started **type 2**, not type 1.
-- When the type 2 section failed any check (sum, MD5, type, length, or
-  an erased entry with its data left in place), the valid type 1 section
-  was **not** started, with or without a boot record, even though its
-  MD5 was computed and passed. The selector went to step 5. The type 1
-  section was started only when the type 2 area was erased flash.
-
-It is not known yet whether the order above or the simulation is wrong:
-the selector's control logic runs a few instructions that the
-decompression service and the MD5 code do not. Until the decompilation
-is re-read against these cases, treat the fallback to section B as
-**unconfirmed** (Q7).
+Simulated: run black-box on flash images with sections A and B at the
+offsets section A uses, the selector follows this order. With a boot
+record, it starts A when A is valid and B when A fails any check (data
+MD5, stored digest, entry sum, type, length, or an erased entry). With
+no record, it starts B whenever B is valid, and A when only A is valid.
+With both invalid it goes to step 5. An earlier simulation that seemed
+to disagree (no fallback, type 2 preferred without a record, tag not
+checked) had placed A over the end of B, so B was corrupt in every case
+where A was present, and its tag case went through the boot record. The
+simulator was not at fault.
 
 Where the boot records come from: the image itself contains no
 `SIPURA *` record. Sections A and B write them when they install an
@@ -610,14 +612,21 @@ To produce an image the device might accept, a writer would:
 The bootloader checks each section's type, tag, entry byte sum, length
 and MD5 (§5, Section C). It does not check the global header MD5 in the
 boot block's header copy (Simulated); whether anything else checks it at
-boot is not known. Keep each section's data length a multiple of 4: in
-simulation the boot selector never started a section of any other length
-(Simulated, Medium; every vendor section already is). The decompiled
-boot selector falls back to another valid section in flash if the
-preferred one fails, but a simulation of it did not (§5, Section C,
-Order), and if none is valid it stops (Q7). **Do not flash an
-experimental image until the recovery question (Q7) is answered**, and
-keep a valid section of the other type in flash.
+boot is not known. The start address (data start + field 0x14) must be
+a multiple of 4, or the boot selector stops without trying another
+section (§5, Section C, Order step 4). With field 0x14 = data length −
+0x10, as in every vendor section, that means a data length that is a
+multiple of 4. The length itself does not matter (Simulated: a section
+of length 0x1037 with field 0x14 = 0x1024 was started, and one of
+length 0x1038 with field 0x14 = 0x1026 was not).
+The tag (field 0x04) is checked only when the selector finds a section
+by scanning, not through the boot record, so set it correctly anyway.
+The boot selector falls back to another valid section in flash if the
+preferred one fails (Simulated), and if none is valid it stops (Q7).
+Its scan only looks at 64 KB boundaries (§5, flash layout), so keep a
+valid section B at flash 0x20000 and do not let an experimental
+application overlap it. **Do not flash an experimental image until the
+rest of the recovery question (Q7) is answered.**
 
 ## 7. Upgrade transport
 
@@ -787,6 +796,6 @@ are being built from the instruction set manual in openmipsx's
 | Q4 | Directory type 0x10, word 3 (the other record types are resolved, see §4.4). Values (0x1472, 0xC46, 0xD1D0, 0xCAAB, 0x16EA, 0x35A8, 0x4EB8, 0x2B1) are not the 16-bit byte sum or either half of the CRC-32 of the uncompressed data. | Possibly a checksum the loader checks. |
 | Q5 | Does the loader ignore the "Varies" words in non-stream directory records? | Generator correctness. |
 | Q6 | Section C's embedded program is the boot selector: it checks and starts a type 2 or type 1 section from flash at 0x0C000000 (§5). The code at 0x0380 is the decompression service of §4.6. Sections A and B both write the boot records into flash sectors 0 and 1, with identical code; the +0x08 word is a sequence number increased on every write. Section A writes type 0 sections at flash 0xF2000, which confirms section C's placement. What section B does when started is in §5. All of these are answered. Still open: what runs before the boot selector; whether flash really repeats through the window (the boot selector's 0x0CFF2400 against flash offset 0xF2400); and the meaning of the record's +0x10 and +0x14 halfwords. | Boot chain and recovery. |
-| Q7 | Mostly answered. Section B is a recovery image (§5, Section B). From the decompilation, if the application fails its checks, the boot selector falls back to section B. **A simulation of the boot selector did not fall back** (§5, Section C, Order), so this is unconfirmed until that is resolved. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
+| Q7 | Mostly answered. Section B is a recovery image (§5, Section B). If the application fails its checks, the boot selector falls back to section B (from the decompilation, and **Simulated**: §5, Section C, Order). This needs section B intact at a 64 KB boundary the scan covers, or a valid type 1 slot in the boot record. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
 | Q8 | Is the format the same in other firmware versions? | Only 3.1.20(GW) has been examined. |
 | Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: is type 0x06 really r25? Bit 30 of the entry record is partly answered: the jump ignores it (§4.4), but whether anything else reads it is unknown. | Load map correctness; whether they are second-core code, data or something else. |
