@@ -1,7 +1,8 @@
 # SPA3000 hardware
 
 Status: draft, from photos of both sides of one board and the case
-(2026-10-27). Clean-side document: chip markings and public datasheets
+(2026-10-27) and continuity tests on the unpowered board (2026-10-28).
+Clean-side document: chip markings and public datasheets
 only. See [`../clean-room.md`](../clean-room.md) for the process.
 
 Each fact is marked:
@@ -10,6 +11,8 @@ Each fact is marked:
 - **Datasheet**: from the manufacturer's public datasheet for that part.
 - **Public source**: from public open-source code or documentation about
   a related device (§2.6). True of that device; to be checked on this one.
+- **Measured**: tested on the board with a multimeter (continuity or
+  diode test, unpowered unless stated).
 - **Hypothesis**: inferred from placement or typical use; not confirmed.
 
 Photos are in [`photos/`](photos/):
@@ -50,6 +53,9 @@ Public source code used:
 | Rear ports, left to right seen from behind | LINE (RJ11, FXO), PHONE (RJ11, FXS), INTERNET (RJ45), power jack | Read (case label) |
 | Rear ports, left to right seen from above with the ports at the top | Power jack, RJ45, PHONE, LINE. LINE is the outer RJ11, next to the Si3050/Si3019 corner of the board. | Read |
 | LEDs | Surface-mount, along the front edge of the top side: D1, D4, D7, D8 | Read |
+| Front panel | Four light windows, left to right seen from the front: Power (⏻ symbol), INTERNET, PHONE, LINE | Read (case label) |
+| LED positions | Left to right seen from the front: D1 (Power), D4 (INTERNET), D8 (PHONE), D7 (LINE). R20 sits beside D1 and R79 beside D4; D8 and D7 have no resistor beside them. | Read (from a photo with the board above the case) |
+| LED wiring | D4, D7 and D8 share one trace on their board-edge side, which is their anode side; with the board unpowered, diode-testing any one of them lights all three at about 1.8 V. D1 (Power) is not on that trace: it reads 1.2 V one way and 0.9 V the other and does not light, so something conducts in parallel with it. | Measured |
 | Test points | TP2, TP3, TP4, TP6 and T1 (plated holes) | Read; function unknown |
 
 ## 2. Main components
@@ -59,7 +65,7 @@ Public source code used:
 | Ref | Marking | Part | Role | Status |
 |---|---|---|---|---|
 | — | ESS `Visba3` `ES3890F` `F075` | ESS Technology ES3890F, a dual 32-bit RISC media processor sold for Video CD players; 128-pin PQFP. Pins in §2.5. | Main CPU. Runs the MIPS-X code described in the firmware spec. | Read; package Datasheet |
-| Y1 | `TXC 27.0…` | 27.0 MHz crystal (TXC), HC-49/US can with its leads formed onto surface pads. Two unused plated holes about 4.9 mm apart on the underside, under Y1, look like an alternative through-hole HC-49 footprint. | CPU clock. 27 MHz is the standard reference for video SoCs of this kind. Routing: two traces run from Y1 to vias, cross to the underside, and come back up through two more vias with short traces to ES3890F pins 30 and 31 (XIN, XOUT; §2.5). Hypothesis: the underside part of the path goes through the load capacitors, probably C5 and C7 (a matched pair beside the flash, each with a trace to a via), and perhaps a feedback resistor. | Read; routing Read (from photos); parts Hypothesis |
+| Y1 | `TXC 27.0…` | 27.0 MHz crystal (TXC), HC-49/US can with its leads formed onto surface pads. Two unused plated holes about 4.9 mm apart on the underside, under Y1, look like an alternative through-hole HC-49 footprint. | CPU clock. 27 MHz is the standard reference for video SoCs of this kind. Routing: two traces run from Y1 to vias, cross to the underside, and come back up through two more vias with short traces to ES3890F pins 30 and 31 (XIN, XOUT; §2.5); each end of Y1 has continuity to one of them (Measured). Hypothesis: the underside part of the path goes through the load capacitors, probably C5 and C7 (a matched pair beside the flash, each with a trace to a via), and perhaps a feedback resistor. | Read; pins 30 and 31 Measured; parts Hypothesis |
 | U3 (underside) | `AM29LV081B-90EC` `0331GBM J` `© 1997 AMD` | AMD Am29LV081B: 8 Mbit (1 MB) parallel NOR flash, 3 V, 8-bit data bus only, 90 ns, 40-pin TSOP, sixteen uniform 64 KB sectors | Program storage. A 775 KB upgrade image fits with room to spare. | Read; details Datasheet |
 | U13 (underside) | `SAMSUNG` `K4S161622…-TC60` (partly legible) | Samsung K4S161622-series SDRAM: 16 Mbit (2 MB), 16-bit wide, 50-pin TSOP-II; the -60 speed grade is 166 MHz | Main RAM. 2 MB matches the 0x001FFFF0 value in the firmware spec's packed-section header (§4.1), which looks like a stack pointer at the top of RAM. | Read (partial); size Datasheet |
 | U6 (underside) | ST `74HC32` | Quad 2-input OR gate | Glue logic. Hypothesis: combines bus strobes and chip selects for the Ethernet chip or flash. | Read; role Hypothesis |
@@ -120,7 +126,7 @@ are the package pins; signal names are ESS's.
 No UART or JTAG pins are listed. A serial console would have to use AUX
 pins, through a function the brief does not describe or in software.
 
-**Orientation on the board** (Hypothesis, from photos): pin 1 is at the
+**Orientation on the board** (Measured, 2026-10-28): pin 1 is at the
 corner of the package marked by the small round dot, the corner furthest
 from U2 on the RTL8019AS side. With the usual anticlockwise numbering, pins
 1–38 run along the long edge facing the RTL8019AS, 39–64 along the short
@@ -138,9 +144,13 @@ short edge furthest from U2. Three things agree:
 - R7 and R8 (4.7 kΩ) sit at the corner where pins 59 and 60 would be, which
   need pull-ups.
 
-The pin count was made in a close-up taken at an angle, so it could be off
-by one. Confirm with a continuity tester before relying on it (for example,
-each end of Y1 to pins 30 and 31, through any part on the underside).
+Confirmed with a continuity tester on the unpowered board:
+
+- each end of Y1 has continuity to one of pins 30 and 31;
+- pins 32, 41, 65, 97 and 117 (VSS) all have continuity to ground.
+
+The ground pins are spread over all four edges, so the numbering is right
+all the way round the package.
 
 ### 2.6 Related board: Linksys PAP2, from MAME
 
