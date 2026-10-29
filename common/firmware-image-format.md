@@ -86,7 +86,7 @@ Offsets in this section are relative to the start of the section data.
 | 0x00 | 4 | 0x00060803 | 0x00060803 | Constant; perhaps a format version | Observed |
 | 0x04 | 4 | 0x0009A290 | 0x000145C4 | Offset of the load directory (§4.4) | **Verified** |
 | 0x08 | 4 | 12 | 5 | Number of load directory records | **Verified** |
-| 0x0C | 4 | 0x001FFFF0 | 0x001FFF00 | Unknown. Hypothesis: initial stack pointer near the top of RAM. The board has 2 MB of SDRAM ([`hardware.md`](../spa3000/hardware.md)), so this is supported. | Hypothesis |
+| 0x0C | 4 | 0x001FFFF0 | 0x001FFF00 | Unknown. Hypothesis: initial stack pointer near the top of RAM. The board has 2 MB of EDO DRAM ([`hardware.md`](../spa3000/hardware.md)), so this is supported. | Hypothesis |
 | 0x10 | 4 | 0x0009A794 | 0x00014A3C | Section data length (same as the table entry) | **Verified** |
 | 0x14 | 4 | 0x0009A784 | 0x00014A2C | Section data length − 0x10 | Observed |
 | 0x18 | 8 | zero | zero | Reserved | Observed |
