@@ -10,7 +10,7 @@ Each fact is marked:
 - **Read**: printed on the part, board or case and legible in the photos.
 - **Datasheet**: from the manufacturer's public datasheet for that part.
 - **Public source**: from public open-source code or documentation about
-  a related device (§2.6). True of that device; to be checked on this one.
+  a related device (§2.6, §2.7). True of that device; to be checked on this one.
 - **Measured**: tested on the board with a multimeter (continuity or
   diode test, unpowered unless stated).
 - **Hypothesis**: inferred from placement or typical use; not confirmed.
@@ -48,6 +48,7 @@ Public datasheets used:
 | ES3890 | ESS Technology, *ES3890 Video CD Processor Product Brief*, SAM0487-031704, 6 pages. Pinout and pin description only; no registers, memory map or timing. No full datasheet has been found in public. | HTML copy at alldatasheet.com (`/html-pdf/126592/ETC1/ES3890F/`); PDF at insidegadgets.com (`/wp-content/uploads/2018/03/ES3890F.pdf`), behind a browser check |
 | RTL8019AS | Realtek, *RTL8019AS Specification*, LS003.8 (20 August 2000). Used for the pin configuration (§3) and pin descriptions (§4). | Local `reference/` folder, `20261029-RTL8019AS_Datasheet.pdf`, from a university course page (fdi.ucm.es); source and hash in [`../clean-room.md`](../clean-room.md) |
 | Si3210 | Silicon Labs, *Si3210/Si3211 ProSLIC Data Sheet*, rev 1.61. Used here for the external parts lists: Figure 10 and Table 13 (BJT/inductor DC-DC converter) and Figure 13 and Table 16 (discrete linefeed). Local `reference/` folder, `20261029-Si3210_Si3211_Datasheet_rev1_61.pdf`; source and hash in [`../clean-room.md`](../clean-room.md) |
+| ES3880, ES3883 | Philips, *Service Manual FW-V355 & FW-M355* (3139 785 30029), chapter 8, "VCD – MPEG-01B module", pages 8-2 to 8-8: circuit notes, block diagram, ES3880 and ES3883 pin tables and the board schematic. Not a datasheet, but the only public pin tables found for these two parts. Used for §2.7. | manuals.plus (`/m/4c81edb8bef9b8d9e240dcf8a33d02d68d289db64084d8ec4cbf846ae15a6de2`), behind a browser check; read in the browser 2026-10-29, not saved |
 
 Public source code used:
 
@@ -141,9 +142,9 @@ are the package pins; signal names are ESS's.
 | 30, 31 | XIN, XOUT | 27 MHz crystal (Y1) | Datasheet |
 | 33–40, 43–54 | LA[19:0] | External bus address, 20 bits (1 MB, the size of U3). The brief does not say which bit is on which pin. | Datasheet |
 | 55–57 | TDMFS, TDMDR, TDMCLK | Serial data input, meant for a CD-ROM drive: frame, data and clock | Datasheet |
-| 58–61 | TBCK, SEL_PLL1/TWS, SEL_PLL0/TSD, MCLK | I²S-style audio serial output (bit clock, word select, data) and master clock. Pins 59 and 60 are also read as PLL mode straps and want pull-ups for normal operation. | Datasheet |
+| 58–61 | TBCK, SEL_PLL1/TWS, SEL_PLL0/TSD, MCLK | I²S-style audio serial output (bit clock, word select, data) and master clock. Pins 59 and 60 are also read as PLL mode straps and want pull-ups for normal operation. The brief gives no strap table; the ES3880's is in §2.7. | Datasheet |
 | 62, 63, 67–69 | CAS#, DRAS1#, DRAS0#, DWE#, DOE# | DRAM control | Datasheet |
-| 70–78 (and MA9) | MA[9:0] | DRAM multiplexed address. The brief gives no pin number for MA9. | Datasheet |
+| 70–78 (and MA9) | MA[9:0] | DRAM multiplexed address. The brief gives no pin number for MA9. On the ES3880, MA9 and DOE# share one pin (§2.7), so MA9 is probably on the DOE# pin here too. | Datasheet; MA9 Hypothesis |
 | 79–94 | DBUS[15:0] | DRAM data, 16 bits | Datasheet |
 | 96 | REST# | External reset input (active low) | Datasheet |
 | 100–115, 118–122 | AUX2[7:0], AUX1[7:0], AUX0[4:0] | General-purpose I/O; pin 120 (AUX0[2]) is input only. The brief suggests VCD uses (front-panel display, CD subcode) for some of them. | Datasheet |
@@ -198,7 +199,34 @@ source** for the PAP2, unless marked otherwise.
 | Flash | 0x1C000000–0x1C0FFFFF (1 MB), mirrored through 0x1CFFFFFF | Matches the 0x1CFEFFFC read in the processor spec §8 |
 | Reset PC | Byte address 0x1CFFFF80, the last 128 bytes of the mirrored flash window. The author notes it might be 0x7FFFFF80 with another mirror. | Consistent with the boot section sitting at the top of the flash window (format spec §5, Placement) |
 | On-chip registers | Guessed at 0x20000000–0x2000FFFF. The author suggests ESS's ES6008 datasheet may help. | Hypothesis; a lead for the peripheral specs ([stack plan](https://github.com/openmipsx/.github/blob/main/plan/open-source-stack.md) §3.2) |
-| CPU clock | 81 MHz, guessed as three times the 27 MHz crystal, from the ES3880 datasheet | Hypothesis; relevant to [stack plan](https://github.com/openmipsx/.github/blob/main/plan/open-source-stack.md) P2 |
+| CPU clock | 81 MHz, guessed as three times the 27 MHz crystal, from the ES3880 datasheet | The ES3880's strap table (§2.7) gives 81 MHz when both SEL_PLL straps are high. Hypothesis, stronger than before; relevant to [stack plan](https://github.com/openmipsx/.github/blob/main/plan/open-source-stack.md) P2 |
+
+### 2.7 Related chips: ES3880 and ES3883, from a Philips service manual
+
+The ES3880 is ESS's earlier Video CD processor, a 100-pin PQFP, and the
+ES3883 is its "Video CD Companion". Philips used the pair in the VCD
+module of the FW-V355 micro system; its service manual (see "Public
+datasheets used") has their pin tables and the board schematic.
+Everything below is **Public source** for that board, unless marked
+otherwise.
+
+**The ES3890F looks like the two chips in one package** (Hypothesis).
+Between them they have what the ES3890F brief lists (§2.5): the ES3880
+has the RISC processor, external bus (LA, LD, LCS0#/1#/3#, LOE#, LWR#),
+DRAM interface, TDM input and audio serial ports. The ES3883 has the
+27 MHz crystal oscillator, the video encoder and DACs, the microphone
+ADC and further AUX ports. The ES3890F brief has all of these, with the
+crystal on the processor.
+
+| Item | ES3880 / ES3883 | Fit with this board |
+|---|---|---|
+| PLL straps | ES3880 SEL_PLL[1:0] set the CPU clock: 00 bypass (CPUCLK pin used instead), 01 54 MHz, 10 67.5 MHz, 11 81 MHz. They share pins with the audio transmit data (AOUT, SEL_PLL0) and frame sync (ATFS, SEL_PLL1), as on the ES3890F. | The `TWS` pad (pin 59, SEL_PLL1) idles high (§1), and R7 and R8 sit by pins 59 and 60 (§2.5). If both straps read high, the CPU runs at 81 MHz. Pin 60 not yet measured. Hypothesis |
+| DRAM | ES3880 pin 92 is DA9/DOE#: one pin is both the tenth DRAM address line and the DRAM output enable. The DRAM data bus is 16 bits, DBUS[15:0]. | Explains the missing MA9 pin in the ES3890F brief (§2.5). U13 needs ten address lines (§2.1). Check continuity from U13's A9 and OE# pins to the ES3890F's DOE# pin. Hypothesis |
+| AUX pins | ES3880 AUX[7:0]; AUX0 and AUX1 are open-collector. ES3883 AUX0–AUX15, each with a VCD servo or display role or general control; AUX11–AUX15 can also be interrupt inputs or outputs. | The ES3890F has AUX0–AUX3 ports (§2.5). Which of them are open-collector is unknown |
+| Companion register port | The ES3883 has an 8-bit register port named DSC: data DSC_D[7:0], clock DSC_C and strobe DSC_S, "for programming to access internal registers". On the Philips board DSC_D[7:0] are wired to the ES3880's LD[7:0], DSC_C to LCS1# (through a link, 4002, drawn dashed) and DSC_S to the ES3880's AUX5. | So in that design, the companion's registers sit in the CS1 window on the 8-bit data bus. On the PAP2 and here, CS1# also selects the RTL8019AS (§2.6, H3). If the ES3890F kept this arrangement inside the package, its companion registers are reached through CS1 too. Hypothesis |
+| Reset | The ES3883 has a reset output, RSTOUT_B, which resets the ES3880 on the Philips board; its own reset input is RESET_B. | The ES3890F's REST# (pin 96) is an input (§2.5). Hypothesis: the merged chip has the reset output internally |
+| Internal memories | ES3880 block diagram: a RISC processor with 2K×32 ROM and 512×32 SRAM; a separate "serial MPEG processor" with 64×32 ROM and 32×32 SRAM; a Huffman decoder; a DRAM DMA controller; on-screen display and video output registers. | Suggests a small on-chip ROM on the RISC side and a second, smaller processor. Hypothesis for the ES3890F |
+| Clocks | ES3883: 27 MHz crystal on XIN/XOUT; its own PLL straps (on RSD and RWS) select the MPEG decoder clock: bypass, 27, 32.4 or 40.5 MHz. | The ES3890F has the crystal pins (30, 31; Measured, §2.5) |
 
 ## 3. What this means for new firmware
 
