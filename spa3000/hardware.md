@@ -1,7 +1,7 @@
 # SPA3000 hardware
 
 Status: draft, from photos of both sides of one board and the case
-(2026-10-27), continuity tests on the unpowered board (2026-10-28), and DC
+(2026-10-27) and close-ups (2026-10-29), continuity tests on the unpowered board (2026-10-28), and DC
 voltages on the powered board running the stock firmware (2026-10-28). Clean-side document: chip markings and public datasheets
 only. See [`../clean-room.md`](../clean-room.md) for the process.
 
@@ -29,6 +29,14 @@ Photos are in [`photos/`](photos/):
 | `20261027-SPA3000-CPU-Ethernet-Closeup.jpg` | ES3890F, RTL8019AS and the Y2 marking |
 | `20261027-SPA3000-Inductor-Bridge-Closeup.jpg` | L2, Q1, bridge D14 and the LEDs |
 | `20261027-SPA3000-Regulators-Closeup.jpg` | REG1, REG2 and relay K1 |
+| `20261029-SPA3000-JP1-JP2-Edge-Closeup.jpg` | Board edge between the power jack and U2: C25, JP1/JP2, the three-hole footprint, `TWS` |
+| `20261029-SPA3000-Underside-Rear-Closeup.jpg` | Underside, rear half: RJ11 jack pins, D2, Q19/Q20, the transistor rows |
+| `20261029-SPA3000-Underside-Glue-Logic-Closeup.jpg` | Underside: U13, U3, U6, U10 and the parts around them |
+| `20261029-SPA3000-Underside-DAA-Closeup.jpg` | Underside, right side: L7–L10, Q4–Q9, Q26, Z1 and the large resistors |
+
+`20261029-SPA3000-Board-Map.svg` (and `.png`) beside this file is a
+cartoon map of both sides, drawn from these photos, for finding parts.
+Positions are approximate.
 
 Public datasheets used:
 
@@ -58,6 +66,7 @@ Public source code used:
 | LED positions | Left to right seen from the front: D1 (Power), D4 (INTERNET), D8 (PHONE), D7 (LINE). R20 sits beside D1 and R79 beside D4; D8 and D7 have no resistor beside them. | Read (from a photo with the board above the case) |
 | LED wiring | D4, D7 and D8 share one trace on their board-edge side, which is their anode side; with the board unpowered, diode-testing any one of them lights all three at about 1.8 V. D1 (Power) is not on that trace: it reads 1.2 V one way and 0.9 V the other and does not light, so something conducts in parallel with it. | Measured |
 | Test points | TP2, TP3, TP6 and T1 are plated holes. TP4's label is above the top-left corner of the RTL8019AS, with no hole beside it; not yet probed. A small pad labelled `TWS` (the name of ES3890F pin 59, §2.5) is below TP4, beside C73. | Read |
+| Edge footprints between the power jack and U2 | Along the left board edge, going from the power jack towards U2: C25 (the large electrolytic), a single plated hole beside C25's label, a two-hole footprint in one silkscreen box labelled JP2 (square pad) and JP1, then an unpopulated three-hole footprint, and then U2. The three-hole footprint has its own silkscreen box with a thick bar beside its square pad, which is at the JP1 end (pin 1 by the usual convention). No label is visible for it. The `TWS` pad sits just inboard of where JP1 and the three-hole footprint meet; C73, R80, C32 and R23 sit between there and the RTL8019AS. | Read (close-up, 2026-10-29) |
 | Test point voltages, powered and idle (no call), to REG2 pin 1 | TP2 0.11 V, TP3 0.95 V, TP6 0 V, T1 0 V, all steady. TP2 and T1 are beside the LINE jack, TP3 beside the Si3210 and TP6 beside the Si3050. None sits at a logic-high level, so none looks like an idle serial transmit line; TP2 and TP3 look like analog nodes in the line circuits. `TWS` pad 2.46 V, steady: held high, not a running word-select clock (which would average about half the rail). | Measured (powered); roles Hypothesis |
 
 ## 2. Main components
@@ -67,11 +76,12 @@ Public source code used:
 | Ref | Marking | Part | Role | Status |
 |---|---|---|---|---|
 | — | ESS `Visba3` `ES3890F` `F075` | ESS Technology ES3890F, a dual 32-bit RISC media processor sold for Video CD players; 128-pin PQFP. Pins in §2.5. | Main CPU. Runs the MIPS-X code described in the firmware spec. | Read; package Datasheet |
-| Y1 | `TXC 27.0…` | 27.0 MHz crystal (TXC), HC-49/US can with its leads formed onto surface pads. Two unused plated holes about 4.9 mm apart on the underside, under Y1, look like an alternative through-hole HC-49 footprint. | CPU clock. 27 MHz is the standard reference for video SoCs of this kind. Routing: two traces run from Y1 to vias, cross to the underside, and come back up through two more vias with short traces to ES3890F pins 30 and 31 (XIN, XOUT; §2.5); each end of Y1 has continuity to one of them (Measured). Hypothesis: the underside part of the path goes through the load capacitors, probably C5 and C7 (a matched pair beside the flash, each with a trace to a via), and perhaps a feedback resistor. | Read; pins 30 and 31 Measured; parts Hypothesis |
+| Y1 | `TXC 27.0…` | 27.0 MHz crystal (TXC), HC-49/US can with its leads formed onto surface pads. Two unused plated holes about 4.9 mm apart on the underside, under Y1, look like an alternative through-hole HC-49 footprint; seen from below they sit just inboard of U2's inner row, level with roughly its 8th to 10th positions from pin 1 (Read, 2026-10-29). | CPU clock. 27 MHz is the standard reference for video SoCs of this kind. Routing: two traces run from Y1 to vias, cross to the underside, and come back up through two more vias with short traces to ES3890F pins 30 and 31 (XIN, XOUT; §2.5); each end of Y1 has continuity to one of them (Measured). Hypothesis: the underside part of the path goes through the load capacitors, probably C5 and C7 (a matched pair stacked just below the flash on the underside, C5 nearer the flash, with C12 above them and R5 beside them; each has a trace to a via), and perhaps a feedback resistor. | Read; pins 30 and 31 Measured; parts Hypothesis |
 | U3 (underside) | `AM29LV081B-90EC` `0331GBM J` `© 1997 AMD` | AMD Am29LV081B: 8 Mbit (1 MB) parallel NOR flash, 3 V, 8-bit data bus only, 90 ns, 40-pin TSOP, sixteen uniform 64 KB sectors | Program storage. A 775 KB upgrade image fits with room to spare. | Read; details Datasheet |
 | U13 (underside) | `SAMSUNG` `022` `K4E151612C-TC60` (read from a magnified crop of the underside photo; an earlier reading of `K4S161622…` was wrong) | Samsung K4E151612C: EDO DRAM, not SDRAM. 1M × 16 (16 Mbit, 2 MB), 3.3 V, TSOP-II; -60 is a 60 ns access time. EDO has no clock: it is driven by RAS/CAS strobes, which matches the ES3890F's DRAM pins (CAS#, DRAS0/1#, DWE#, DOE#, no clock; §2.5). 10 row and 10 column bits on MA[9:0] address exactly 1M words. `022` is probably a year-and-week date code. | Main RAM. 2 MB matches the 0x001FFFF0 value in the firmware spec's packed-section header (§4.1), which looks like a stack pointer at the top of RAM. | Read; type, size and speed from Samsung's part numbering, Datasheet still to check; row/column split Hypothesis |
 | U6 (underside) | ST `74HC32` | Quad 2-input OR gate | Glue logic. Hypothesis: combines bus strobes and chip selects for the Ethernet chip or flash. | Read; role Hypothesis |
 | U10 (underside) | ST `74HC74` | Dual D flip-flop | Glue logic. Hypothesis: clock division or bus timing for the Ethernet chip. | Read; role Hypothesis |
+| Around U6 and U10 (underside) | — | C20, C81 and R21 beside U10; R14–R18 between U10 and U6; C22 and C34 beside U6; C21 between U2 and U10; D6, a small glass diode, next to the rear end of U2. | Decoupling and pull-ups for the glue logic, by placement | Read (close-up, 2026-10-29); roles Hypothesis |
 | U2 | Unpopulated footprint: two rows of 18 plated, tinned holes (36 in all). Pitch 2.54 mm, scaled from the HC-49/US body of Y1 (17 pitches = 43.2 mm). Pin 1 is the square pad at the top-row end nearest R6 and the M2 mounting hole. On the top side, a fan of about 15 parallel traces runs straight from the ES3890F's nearer pin row into the U2 pads, with no series resistors; a few more go to the R6–R9 group (R7 and R8 marked `472`, 4.7 kΩ; R9 marked `201`, 200 Ω). On the underside, the flash's bus traces run past U2 towards the CPU and do not visibly enter its pads. The ES3890F edge that faces U2 is pins 39–64 (§2.5). | — | U2 carries the 5 V input, so it is a connector, not an alternative memory footprint (Measured, see below). Hypothesis: a development port wired straight to ES3890F pins 39–64: address lines, the CD-ROM serial input and the audio serial output (§2.5). The general-purpose AUX pins are mostly on the far edge, so a serial console, if any, is less likely to be on U2 than first thought. Inner layers cannot be seen. Powered and idle, to REG2 pin 1, numbering each row 1–18 from the square-pad end (the square pad is inner 1; the inner row is nearer the CPU): inner 1 0.2 V and changing (an active signal, mostly low); inner 2 3.05 V steady (probably pulled up); outer 1 4.9 V steady (the 5 V input); outer 2 0.13 V steady. Positions 3–18 of both rows not yet measured. | Read (from photos); 5 V pin and voltages Measured (powered); role Hypothesis |
 
 ### 2.2 Ethernet
@@ -81,6 +91,9 @@ Public source code used:
 | — | Realtek `RTL8019AS` `7526954` `L721F TAIWAN` | Realtek RTL8019AS | Ethernet controller: 10 Mbit/s only, NE2000-compatible register set, ISA-style 8/16-bit bus, 100-pin PQFP | Read; role Datasheet |
 | Y2 | `20R000` | 20.000 MHz crystal | RTL8019AS reference clock (the datasheet calls for 20 MHz) | Read |
 | — | `JXD 1531H` `TF-1606DG` | JXD TF-1606DG | 10Base-T magnetics (isolation transformers and filters) between the RTL8019AS and the RJ45 | Read; role Hypothesis |
+| — (underside, in front of the RJ45) | — | Two rows of six through-hole pins, each row in two groups of three, with one square pad at the U2 end of the row nearer the front. C23, C24 and C72 sit between the rows. | Hypothesis: the JXD TF-1606DG's pins, from their position under it | Read (close-up, 2026-10-29); identity Hypothesis |
+| — (underside, behind the INTERNET jack) | — | Eight pins in two staggered rows of four | The RJ45's contacts | Read (close-up, 2026-10-29) |
+| Q19, Q20 (underside) | — | Two SOT-23 transistors between the JXD pins and the PHONE jack pins, with R78, R81, R84 and D5 beside them | Unknown | Read (close-up, 2026-10-29) |
 
 ### 2.3 Telephony
 
@@ -93,7 +106,11 @@ Public source code used:
 | Q22–Q25, FB1, FB2, RV1 | Transistors with large copper pads, ferrite beads and a surge protector, all beside the Si3019 | — | Hypothesis: the rest of the Si3019's external line circuit (hookswitch transistors, EMI filtering and surge protection) | Hypothesis |
 | K1 | `EC2-5NU` `NEC` `JAPAN` | NEC EC2-5NU: DPDT signal relay with a 5 V coil, non-latching | Hypothesis: the power-fail or lifeline relay. Its two poles would switch tip and ring so that PHONE connects straight to LINE when the unit is off or the relay is released. | Read; role Hypothesis |
 | L2 with Q1 | L2 `330`; Q1 `FZT955` | 33 µH power inductor; Q1 is a Zetex FZT955 high-voltage PNP transistor (SOT-223) | Hypothesis, strongly supported: the Si3210's DC-DC converter, which makes the negative line battery voltage. A high-voltage PNP switch plus an inductor is the usual way to build it. | Read; role Hypothesis |
-| Q2–Q9 (both sides) | Small transistors near the Si3210 | — | Hypothesis: the Si3210's line-drive transistors | Hypothesis |
+| Q2–Q9 (both sides) | Small transistors near the Si3210. On the underside, Q4–Q7 are a row of SOT-23 parts marked `2L`, in the order Q7, Q4, Q6, Q5 going away from U6, with R38, R27, R40, C42 and C43 below them. Q8 and Q9 are larger three-legged parts marked `G1`, each with a row of three unused pads beside it, beside the flash on the side away from U2, behind L7–L10. | `2L` is the SOT-23 marking commonly used for the MMBT5401, a high-voltage PNP transistor; `G1` is not identified | Hypothesis: the Si3210's line-drive transistors | Read (underside close-ups, 2026-10-29); part from the marking Hypothesis; role Hypothesis |
+| L7–L10 (underside) | — | Four two-terminal parts in a row, in the order L8, L7, L10, L9, towards the front edge, with R87 beside them. C102 and C103, two larger capacitors, sit beyond them on the side away from U2. | Unknown | Read (close-up, 2026-10-29) |
+| Q26, Z1 and the large resistors (underside) | Q26: SOT-23 beside a large bare copper pad. Z1: glass diode. R97 marked `1071` (1.07 kΩ); R89 marked `000` (0 Ω). | — | Hypothesis: more of the Si3019's line-side circuit, from their position under the DAA. Also on that side: R90, R94, R95, R99, R106, R111, C94, C95, C98, C101, C104 and C111. | Read (close-up, 2026-10-29); role Hypothesis |
+| Jack pins (underside) | — | The PHONE and LINE jacks' pins are numbered 1–8 as one set on the silkscreen: 1–4 under PHONE and 5–8 under LINE, each jack's four pins in two staggered rows of two. C40 is beside pin 8. | — | Read (close-up, 2026-10-29) |
+| — (underside) | `ES1D` | ES1D, a general-purpose 1 A, 200 V fast-recovery rectifier in an SMA package | Near the rear edge, between the locating pegs of the PHONE and LINE jacks. No label is visible beside it; the nearby `D2` label sits by a two-hole footprint with a square pad, just in front of the PHONE jack pins. Role unknown. | Read (close-up, 2026-10-29); part Datasheet |
 
 ### 2.4 Power
 
@@ -101,6 +118,7 @@ Public source code used:
 |---|---|---|---|---|
 | REG2 | `AS1117L-33` | AS1117 3.3 V low-dropout regulator, SOT-223 | 3.3 V rail from the 5 V input, for the flash, RAM and logic. Powered: 3.4 V out, 4.9 V in. Pin 1 is ground; with the marking upright and the legs nearest, pins 1, 2, 3 run left to right, and the tab is the output. | Read; voltages Measured (powered); loads Hypothesis |
 | REG1 | `1117C` `38 ADC` | Adjustable 1117-family low-dropout regulator, SOT-223. Powered: 2.53 V out (tab), 4.9 V in (pin 3), 1.27 V on the adjust pin (pin 1). Output minus adjust is 1.26 V, the 1117's reference, so it is the adjustable version, set to 2.5 V by two resistors; "38" is not a voltage. It runs from the 5 V input, not the 3.3 V rail. | Hypothesis: the ES3890F's 2.5 V core, PLL and video DAC rail (§2.5). To confirm, check continuity from REG1's tab to ES3890F VCC pins with the board unpowered. | Read; voltages Measured (powered); load Hypothesis |
+| L12, L13 (underside) | `000` on both (0 Ω) | Zero-ohm links, beside the power jack's two solder tabs | Hypothesis: links in the 5 V input, perhaps positions for filter inductors | Read (close-up, 2026-10-29); role Hypothesis |
 
 ### 2.5 ES3890F pins
 
@@ -198,10 +216,10 @@ source** for the PAP2, unless marked otherwise.
 
 | # | Question | How to answer |
 |---|---|---|
-| H1 | Is there a serial console? No 3- or 4-pin header was found. TP2, TP3, TP6 and T1 sit in the telephony area and none idles high (§1), so U2 is the main candidate left; TP4 is unprobed. | Probe with a scope or logic analyser at boot, looking for UART-like bursts at common baud rates |
+| H1 | Is there a serial console? An unpopulated, unlabelled three-hole footprint sits on the board edge between JP1 and U2 (§1). Three pins is the usual layout for a serial console (transmit, receive, ground), so it is now the first candidate. TP2, TP3, TP6 and T1 sit in the telephony area and none idles high (§1); U2 and TP4 remain candidates. | Powered and idle, measure each of the three holes to REG2 pin 1: a transmit line idles at about 3.3 V, and ground reads 0 V with continuity to REG2 pin 1. Then probe the high one with a scope or logic analyser at boot, looking for UART-like bursts at common baud rates |
 | H2 | What is the U2 footprint? It carries 5 V (outer 1), so it is a connector of some kind, not alternative memory. It faces ES3890F pins 39–64 (§2.5). Next: finish the powered voltages for positions 3–18 of both rows (§2.1). | Use a continuity tester between U2 pins and ES3890F pins 39–64 first, then the flash and RTL8019AS pins |
 | H3 | How are the SLIC, DAA and Ethernet wired to the ES3890F (bus, chip selects, interrupts, PCM)? On the PAP2 the RTL8019AS is on CS1# (pin 19) and the 8-bit data bus (§2.6). | Trace the board, or probe with a logic analyser; check the PAP2 wiring first |
 | H4 | GPIOs for the LEDs, the reset button and relay K1. On the PAP2 the LEDs are on AUX1[4–7], pins 112–115 (§2.6). | Continuity from each LED's resistor to pins 112–115 first; otherwise trace the board, or probe while the original firmware runs |
-| H5 | Is there a reset button? None is fitted. A small two-hole footprint above U2 (next to C73) may be an unfitted switch. Hypothesis: factory reset is done only from the phone menu (IVR), as the public administration guide describes for SPA devices. | Check the footprint's label and traces; check the administration guide |
+| H5 | Is there a reset button? None is fitted. The two-hole footprint near U2 is labelled JP2 and JP1 (§1), so it is a pair of jumper pads, not a switch footprint. What the jumper selects is unknown: it could be a factory reset, a boot option or a test mode. Hypothesis: factory reset is done only from the phone menu (IVR), as the public administration guide describes for SPA devices. | Unpowered, check continuity from JP1 and JP2 to ground, 3.3 V and the ES3890F's pins; check the administration guide |
 | H6 | Does REG1 feed the ES3890F's VCC pins? Its output is measured: 2.5 V, adjustable (§2.4). U13's full marking is now read (§2.1). | Continuity from REG1's tab to ES3890F pin 29 or 95, unpowered |
 | H7 | Can the flash be read in circuit, to back up the original contents before any experiment? | Check whether a TSOP clip fits, or desolder. This would produce dirty-side material, so do it on the dirty side. |
