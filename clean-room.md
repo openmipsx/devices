@@ -88,6 +88,65 @@ Public reference documents (the MIPS-X manual, user guides, datasheets)
 are not copied here. The provenance log says where each came from, and the
 hashes below identify the copies that were used.
 
+## Validating the simulator on vendor code
+
+The [mipsx-sdk](https://github.com/openmipsx/mipsx-sdk) simulator was
+written from the specs, and the compiler was tested against the
+simulator, so a wrong fact in a spec would leave every test passing. The
+vendor's firmware ran on real hardware, which makes it the best evidence
+short of the hardware itself. Running it on the simulator is allowed,
+but it is dirty-side work, in the same way as reading it in Ghidra.
+
+**The simulator stays clean.** Running vendor code on it does not change
+that, as long as nobody edits the simulator from what a vendor run
+showed. Anything a run produces is dirty: traces, hazard reports (they
+print the PC, the instructions and nearby symbols), `--disassemble`
+output, and ELF files built from unpacked sections. Keep all of it on
+the dirty side, never in `mipsx-sdk`.
+
+**Results cross as spec facts.** What reaches the clean side is a change
+to a spec, with a provenance row and a confidence level, for example
+"byte loads with opcode 101 sign-extend: confirmed by running vendor
+code" or "vendor code uses a loaded register two instructions after the
+load, so loads have one delay slot". Addresses, instruction sequences
+and trace excerpts do not cross. Counts are fine ("no P1 hazards in N
+million instructions").
+
+**Fixes go through the spec.** If a run shows the simulator is wrong,
+the dirty side corrects the spec. The clean side then changes the
+simulator and writes its own regression test from the spec text, not
+from the instruction sequence that showed the bug. One person, or one
+Claude session, should not both read a vendor trace and edit the
+simulator; the edit cites the spec change.
+
+**Good checks** need an oracle that does not depend on reading the code:
+
+- Routines whose interface is already in a spec, with outputs that can be
+  checked independently: the boot section's decompression service
+  ([`firmware-image-format.md`](common/firmware-image-format.md) §4.6)
+  against zlib, and image validation against a good image and one with
+  a broken checksum.
+- Variants (`mipsx-sim --variant`): each replaces a Hypothesis with an
+  alternative. Vendor code that works under the spec's reading and fails
+  under a variant is evidence for the spec. One result per hypothesis
+  crosses.
+- Hazard checks: the vendor's compiler made code that works, so a hazard
+  reported in vendor code means the simulator or the rule is wrong, and
+  vendor code that breaks a rule variant (`load-delay-2`, `md-delay-2`)
+  is evidence that the stricter rule does not exist.
+
+Code that only runs with the device's peripherals is out of reach until
+the simulator models them. Features that help, such as loading a raw
+blob at an address, setting registers before the start, or ignoring a
+range of I/O addresses, belong in the simulator only if they are general
+and written from the specs, not shaped to what the firmware was seen to
+touch. A vendor run shows what the vendor's toolchain relied on, not
+everything the chip does: constructs it never emits remain unconfirmed.
+
+Each run gets a row in the provenance log naming the image, the
+sections and routines run, the simulator version and options, and the
+spec facts that came out of it.
+
 ## Provenance log
 
 Record each piece of analysis so it can be shown later where every fact in
