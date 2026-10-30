@@ -88,7 +88,7 @@ thing).
 | 4, 5 | **Port 0** data and direction (§6) | Observed |
 | 6, 7 | Port 1 data and direction | Observed |
 | 0x15 | Interrupt enable mask for this block; bit 3 set when interrupts are enabled. Written 0x08 | Observed |
-| 0x16 | Interrupt status, write 1 to clear. Written 0xFF at enable | Observed; Hypothesis, strong |
+| 0x16 | Interrupt status, write 1 to clear. Written 0xFF at enable. Bit 5 is the RTL8019AS interrupt (§8) | Observed; Hypothesis, strong |
 | 0x22, 0x23, 0x40, 0x63, 0x64 | Mode-dependent set-up (§7 step 11) | Observed values; roles unknown |
 | 0x43, 0x46, 0x47 | **Clock/PLL settings**, from a per-mode table; latched by writing reg 0x70 = 0x00 then 0x80 | Observed; Hypothesis, strong |
 | 0x50, 0x51 | Port 2 data and direction; unused | Observed |
@@ -111,7 +111,7 @@ which strap is not known).
 |---|---|
 | 1 | Timer |
 | 7 | DMA columns (cascaded: 0x87C0 and 0x87CC, §8) |
-| 13 | System-control block (§3 regs 0x15 and 0x16; acknowledge 0x20004024) |
+| 13 | System-control block (§3 regs 0x15 and 0x16; acknowledge 0x20004024). The RTL8019AS arrives here as reg 0x16 bit 5 (§8) |
 
 The CPU side (vector at word 0, PSW mask bit, PC chain) is in
 [`processor-es3890.md`](../common/processor-es3890.md) §10.
@@ -278,6 +278,30 @@ interrupt storm.
 (Hypothesis, strong). Writes store the byte in both halves of a halfword;
 reads are bytes. The firmware polls page 3 CONFIG0 bit 2 from the timer
 tick, as a link check (Observed; Datasheet for the register).
+
+**RTL8019AS receive** (Hypothesis, strong; set-up Simulated). The stock
+firmware takes received frames by interrupt, not by polling. It sets
+PSTART = 0x46, PSTOP = 0x60, BNRY = 0x46, CURR = 0x46 (pages 0x40–0x45
+are the transmit buffer, TPSR = 0x40), DCR = 0x4A, RCR = 0x04 and
+IMR = 0x11 (PRX and OVW), and keeps its own next-packet pointer,
+starting at 0x46. The chip's interrupt reaches the CPU through the
+system-control block: reg 0x16 **bit 5** is the Ethernet interrupt,
+cascaded into 0x20004038 **bit 13** (§4). The firmware enables it with
+reg 0x15 = 0x08, reg 0x16 = 0xFF and 0x20004034 bit 13, and makes port 1
+bit 4 an input (presumably the INT pin; which reg 0x15 bit masks reg
+0x16 bit 5 is not known). The handler reads reg 0x16, writes the value
+back, writes 0x20004024 = 0, and then, while ISR & 0x1F is non-zero,
+writes the ISR value back to clear it and acts:
+
+- **OVW**: stops the chip and resets the ring to the start-up values.
+  The ring is emptied, not drained: frames still in it are lost.
+- **PRX**: reads CURR from page 1 and, for each frame from its pointer
+  up to CURR, remote-DMA-reads the 4-byte header, checks the length
+  (64–1522) and the next-page byte, reads the frame without its CRC, and
+  sets BNRY to the next page minus one (0x5F after a wrap). A bad header
+  seen twice skips one page.
+
+While transmitting it holds IMR = 0.
 
 **Si3210 and Si3050 control bus** (Observed; Simulated). Bit-banged on
 0x20004030: bits 1, 2 and 3 are data, Si3210 chip select (active low) and
