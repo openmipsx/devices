@@ -9,7 +9,7 @@ replacement firmware is written from.
 |---|---|
 | [`common/`](common/) | Specs shared across the Sipura and Linksys family: the [firmware image format](common/firmware-image-format.md) and the [ES3890 processor](common/processor-es3890.md) |
 | [`spa3000/`](spa3000/) | Linksys (Sipura) SPA3000: [hardware](spa3000/hardware.md), [peripherals and start-up](spa3000/peripherals.md), [flash contents](spa3000/flash.md) and [photos](spa3000/photos/) |
-| [`pap2t/`](pap2t/) | Linksys PAP2T: not started |
+| [`pap2t/`](pap2t/) | Linksys PAP2T: [hardware](pap2t/hardware.md) (case only so far) and [photos](pap2t/photos/) |
 | [`clean-room.md`](clean-room.md) | How these documents are made, and the provenance log for every source examined |
 
 The format spec was written from the SPA3000's 3.1.20(GW) image. Other
