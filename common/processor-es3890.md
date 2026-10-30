@@ -28,7 +28,8 @@ the opposite of the manual's convention.
 - Two delay slots after every branch and jump. **Verified**.
 - The ES3890 reuses the manual's coprocessor and floating-point memory
   opcodes as byte and halfword loads and stores. **Observed**, strongly
-  supported (§3).
+  supported; the extension done by three of the four loads is
+  **Simulated** (§3).
 - The application calls functions through base registers r23 and r24,
   set by the image loader from the load directory. **Verified** (§6).
 
@@ -58,19 +59,46 @@ Src2 field is the destination for loads and the data source for stores.
 | 000 | `ld` | Load word | Offsets always a multiple of 4 |
 | 010 | `st` | Store word | Offsets always a multiple of 4 |
 | 100 | `ldf` | Load byte, zero-extended | Any offset; result used as a register; sometimes followed by explicit sign extension |
-| 101 | `movfrc` | Load byte, sign-extended | Any offset; Src1 is a normal pointer register, not r0; almost never followed by sign extension |
-| 001 | `ldt` | Load halfword, zero-extended | Offsets always even |
-| 111 | `movtoc` | Load halfword, sign-extended | Offsets always even; the register behaves as a destination |
+| 101 | `movfrc` | Load byte, sign-extended | Any offset; Src1 is a normal pointer register, not r0; in 20 images, almost never followed by sign extension and never by zero extension |
+| 001 | `ldt` | Load halfword, zero-extended | Offsets always even. Simulated: a loaded value ORed into the low half of a word without masking gives correct results only if zero-extended |
+| 111 | `movtoc` | Load halfword, sign-extended | Offsets always even; the register behaves as a destination. Simulated: signed comparisons of loaded samples give correct results only if sign-extended |
 | 011 | `stt` | Store byte (low 8 bits) | Any offset |
 | 110 | `stf` | Store halfword (low 16 bits) | Offsets always even |
 
 Load or store: **Observed** from dataflow (whether the register is
 defined just before or used just after). Sizes: **Observed** from offset
-alignment. Signedness: opcode 100 zero-extends (**Simulated**: with
-it sign-extending, the boot section's decompressor gives wrong output for
-every stream and every image fails its MD5 check). The other three are
-**Hypothesis**: opcodes 101, 001 and 111 did not run on a value where
-signedness mattered. The manual's byte insert and
+alignment.
+
+Signedness:
+
+- Opcode 100 zero-extends (**Simulated**: with it sign-extending, the
+  boot section's decompressor gives wrong output for every stream and
+  every image fails its MD5 check; the application's G.711 decoder (next
+  item) also fails for every code from 0x80 up).
+- Opcode 111 sign-extends a halfword and opcode 001 zero-extends one
+  (**Simulated**). Routines of the SPA3000 application were run on test
+  input whose results can be checked without reading the code. A routine
+  that finds the largest of a set of signed 16-bit samples is right for
+  all 64 test sets under this reading. With the two opcodes' extensions
+  swapped, it is wrong for every one of the 56 sets that hold a negative
+  sample. The application's G.711 decoder, checked against ITU-T G.711
+  for all 256 codes of both laws, is right under this reading and wrong
+  for about a quarter of the codes when they are swapped. The
+  application's G.711 encoder is also right on all 65,536 inputs, but it
+  extends its inputs again itself, so it does not tell the readings
+  apart.
+- Opcode 101 sign-extends a byte (**Observed**, high confidence). In 20
+  vendor images from four code families, a value loaded with opcode 100
+  is followed by explicit sign extension 248 to 414 times per image, and
+  one loaded with opcode 101 once. Tests for "less than zero" on
+  the loaded value are four times as common after 101 as after 100. No
+  simulated vendor code has yet loaded a byte with bit 7 set through it.
+
+The same scan supports the halfword results: after opcode 111 there is
+explicit sign extension once or twice per image and zero extension never, and "less than zero" tests are about
+20 times as common as after 001 or 100.
+
+The manual's byte insert and
 extract sequences (`rotlb`, `rotlcb`) never appear in the application,
 which fits the chip having real byte access.
 
@@ -255,11 +283,13 @@ the registers it sets for them, are in the format spec §4.6.
 
 The vendor's compiler produced code that runs correctly on the device,
 so what it does is evidence of what the hardware allows. These facts come
-from running about 100 million instructions of vendor code on the
+from running about 120 million instructions of vendor code on the
 simulator: the boot section's decompression service (output checked
 against zlib for 8 streams), its boot selector (MD5 checked against a
-reference) and the start-up of nine images. All **Simulated**, with
-counts only.
+reference), the start-up of nine images, and the SPA3000 application's
+G.711 encoder and decoder (checked against ITU-T G.711). All
+**Simulated**, with counts only. The G.711 run also confirms §4's squash
+rule: with the opposite reading the encoder never finishes.
 
 | Rule (manual) | What the vendor code does | Conclusion |
 |---|---|---|

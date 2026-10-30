@@ -293,6 +293,14 @@ select (§6).
 **Flash**: identified by the AMD autoselect sequence; see
 [`flash.md`](flash.md).
 
+**Voice coding** (Simulated). The application does G.711 µ-law and A-law
+coding itself, on the MIPS-X core, to and from 16-bit linear samples; no
+peripheral is involved. Its encoder is bit-exact with ITU-T G.711 for all
+65,536 inputs of both laws, keeping the top 14 (µ-law) or 13 (A-law) bits
+of each sample. Its decoder returns the G.711 output values scaled to
+16 bits. So the Si3210's PCM interface is presumably used in a linear
+mode (Hypothesis), and new firmware needs its own G.711 coder.
+
 ## 9. Side effects to know before running stock firmware
 
 - If both boot-record sectors are erased, the stock application rewrites
