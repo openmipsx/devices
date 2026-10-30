@@ -3,7 +3,8 @@
 Status: draft, from photos of the closed case, a video of the front
 panel during power-on, the stock web UI's Info page, and one photo of
 each side of the bare board, square on and at an angle (all
-2026-10-30), and close-ups of the flash and of the regulators U11 and U12. Clean-side document:
+2026-10-30), and close-ups of the flash, the regulators, the telephony underside,
+the ES3890F, the RAM, the power input and the unfitted footprints. Clean-side document:
 case and chip markings and public datasheets only. See
 [`../clean-room.md`](../clean-room.md) for the process.
 
@@ -19,6 +20,8 @@ blacked out in the label photo, and metadata is stripped from all of them.
 | `20261030-PAP2T-Case-Underside-Label.jpg` | Underside: label, rubber feet, keyhole wall-mount slots |
 | `20261030-PAP2T-Case-Rear-Ports.jpg` | Rear panel: port labels and power rating |
 | `20261030-PAP2T-Case-Front-LEDs.jpg` | Front panel: light windows and their labels |
+| `20261030-PAP2T-Case-Inside.jpg` | Inside of the two case halves, opened: the top (above) with the light pipes, and the base with the grey band (below) |
+| `20261030-PAP2T-LEDs-Front-Panel-Closeup.jpg` | Board sitting in the base: D4, D5, D101 and LED2 behind the PHONE 1, PHONE 2, ETHERNET and Power labels; Q162 (`FZT955`) at the top |
 | `20261030-PAP2T-LEDs-Power-Amber.jpg` | Front panel 1.9 s after power-on: Power amber, the other three green (a frame from the video in §1.1) |
 | `20261030-PAP2T-Board-Top.jpg` | Whole top side, out of the case, rear ports at the top as in the SPA3000's top-side photo |
 | `20261030-PAP2T-Board-Underside.jpg` | Whole underside, turned over top to bottom so the rear ports are at the bottom, as in the SPA3000's underside photo |
@@ -27,6 +30,13 @@ blacked out in the label photo, and metadata is stripped from all of them.
 | `20261030-PAP2T-U51-Flash-Closeup.jpg` | Underside, U51 (the flash) and the parts round it, rear ports towards the bottom |
 | `20261030-PAP2T-U11-Regulator-Closeup.jpg` | U11, the RAM (U52A) and the board marking, at the left edge |
 | `20261030-PAP2T-U12-Regulator-Closeup.jpg` | U12 and the parts round it, between the ES3890F, X1, L200 and LED D4 |
+| `20261030-PAP2T-Underside-Linefeed-Closeup.jpg` | Underside of both telephony blocks: the `2L` transistors Q157, Q159, Q210 and Q212, their resistors, and the tinned pads |
+| `20261030-PAP2T-Underside-D150-D200-Closeup.jpg` | Underside: D150 and D200, both `ES1D`, and the PCB maker's marking |
+| `20261030-PAP2T-SW2-Closeup.jpg` | Right edge by the PHONE 2 jack: the unfitted SW2 footprint, the empty pads beside it, and Q163, Q164, Q216 and Q217 |
+| `20261030-PAP2T-RAM-V015-Closeup.jpg` | Left edge: the RAM's full marking, V015, D251 with R20 and C34, and the ES3890F's pin-103 corner |
+| `20261030-PAP2T-ES3890F-Closeup.jpg` | The ES3890F with its corner pin numbers, R7–R10, and U15 and U151 |
+| `20261030-PAP2T-Power-Input-Closeup.jpg` | Top left: power jack PJ1, FU1, R4 and the unfitted L4, the input choke, D6, Q5 and Q6, U11 |
+| `20261030-PAP2T-Underside-M10-Closeup.jpg` | Underside by M10: the via grid in a rectangular outline, D150 and D200 |
 
 The video itself (74 s, 186 MB) is not published; its hash is in the
 provenance log.
@@ -116,16 +126,20 @@ Silicon Labs Si3215. MAME's PAP2 has two Si3210s instead (SPA3000
 | M-numbered roles | M1–M4 are mounting holes, grounded through their vias. M7–M10 are fiducials (pick-and-place alignment marks), not test points: the underside has its own pair because it carries SMT parts. M5 and M6 are tooling or locating holes. The shared `M` prefix is probably the CAD library's for mechanical parts. A fiducial should have continuity to no net; a reading on any of M7–M10 would make it a test point after all. | Hypothesis |
 | Headers | None. Nothing like the SPA3000's 2×18 U2 footprint (its `hardware.md` §2.1) is on either side, and no TP-labelled test points have been found. | Read (photos and by eye) |
 | Fixing in the case | As received, no screws held the board: it was kept in place mainly by the Ethernet and PHONE jacks through the rear panel, so it could shift against the underside of the case | Observed |
-| SW2 | Footprint by the PHONE 2 jack on the right edge: plated holes, no part fitted as far as the photo shows | Read; "unfitted" to check by eye |
-| V015 | Two small pads near M7, by the left edge beside the RAM | Read; role unknown |
+| Inside the case | Top half: four posts, one with a metal threaded insert, and a single clear moulding with the light pipes for the four front windows. Base: two screw bosses, the two keyhole slots, four small triangular bosses with holes along the front and rear walls, and two oval recesses with holes under the feet; vent slots in the grey band on one side. No opening in either half or the rear panel (§1) for a button, which fits SW2 being unfitted (§2.1). Which bosses, if any, the board should be screwed to is not yet matched against its mounting holes. | Read (photo of the opened case) |
+| SW2 | Footprint by the PHONE 2 jack on the right edge: four plated holes in a rectangle, the layout of a 6 mm through-hole tactile switch. Nothing fitted. Beside it, between SW2 and L151/L152, the pads for C11, R5 and D3 are tinned but empty too. | Read (close-up) |
+| SW2's role | — | Hypothesis: a reset or factory-reset button left off this build, with C11, R5 and D3 its unfitted debounce or protection parts. Tracing its pads, unpowered, would show whether it reaches an ES3890F pin. |
+| V015 | Two small plated holes in a rectangle near M7, on the left edge beside the RAM; nothing fitted | Read (close-up); role unknown. A two-hole footprint, like the SPA3000's JP2 (its reset header), so worth a continuity check in step 4 |
+| Via grid by M10 (underside) | A rectangular outline round a 3 × 3 grid of vias, with no pads: not a footprint for a part | Read (close-up); Hypothesis: thermal vias for a part on the top side |
 
 ### 2.2 Processor, memory and Ethernet
 
 | Ref | Marking | Part | Role | Status |
 |---|---|---|---|---|
-| U13 | ESS `Visba3` `ES3890F` `F333` `AUVF25000` | ESS ES3890F, 128-pin PQFP, as on the SPA3000 (`F075` there) | Main CPU | Read |
+| U13 | ESS `Visba3` `ES3890F` `F333` `AUVF25000` | ESS ES3890F, 128-pin PQFP, as on the SPA3000 (`F075` there). The silkscreen numbers the corner pins 1, 39, 65, 103 and 128; in the top-side photo pin 1 is at the corner nearest the RTL8019AS and X1's side is pins 1–38. | Main CPU | Read |
+| D251, R20, C34 | D251 `T4`, a two-terminal SOD-123-style part; R20 `473` (47 kΩ); C34 a ceramic capacitor. All three at the ES3890F's pin-103 corner, between it and U52. | `T4` is the marking commonly used for the 1N4148W switching diode | Hypothesis: the ES3890F's power-on reset: R20 pulls REST# (pin 96 on the SPA3000, §2.5 there) up, C34 holds it low at power-on, and D251 discharges C34 when the supply falls. The SPA3000 uses a 10 kΩ pull-up and a capacitor without the diode. To confirm by continuity to pin 96. | Read; role Hypothesis |
 | X1 | `27.000`, with a maker's mark read as `VXC` (perhaps `TXC`) above and a code below | 27.000 MHz crystal, HC-49 can with its leads formed onto surface pads, as Y1 on the SPA3000 | CPU clock, as on the SPA3000 and in MAME's PAP2 | Read (angled photo) |
-| U52A, inside a larger U52 outline | `SEC` `KOREA` `628Y` `KM416C1204…-6`; one or two characters before `-6` not legible | Samsung (`SEC`) KM416C1204, TSOP-II. Hypothesis, from Samsung's part numbering, to check against a datasheet: 1M × 16 (2 MB) EDO DRAM, `C` for a 5 V part (`V` would be 3.3 V), `-6` for 60 ns. The SPA3000 has a 3.3 V K4E151612C. The longer U52 pad rows around it look like a second footprint for a longer package. | RAM. 2 MB fits MAME's PAP2 memory map. Whether it really runs from 5 V, and so how the ES3890F's 3.3 V bus drives it, is to measure. | Read; part details and supply Hypothesis |
+| U52A, inside a larger U52 outline | `SEC` `KOREA` `628Y` `KM416C1204AT-6` | Samsung (`SEC`) KM416C1204A, TSOP-II (`T`). Hypothesis, from Samsung's part numbering, to check against a datasheet: 1M × 16 (2 MB) EDO DRAM, revision A, `C` for a 5 V part (`V` would be 3.3 V), `-6` for 60 ns. The SPA3000 has a 3.3 V K4E151612C. U52's longer pad rows round it are a second, larger footprint, with three loose pads at each end of U52A. | RAM. 2 MB fits MAME's PAP2 memory map. Whether it really runs from 5 V, and so how the ES3890F's 3.3 V bus drives it, is to measure. | Read; part details and supply Hypothesis |
 | U51 (underside) | `MX` (Macronix logo) `06…` / `29LV160…B …` / `2R8…700…` / `TAIWAN`. The top is worn and scuffed, probably from rubbing on the case while the board was loose (§2.1); the character after `160` looks like `C`, and the rest of the second line is lost. | Macronix MX29LV160 (C or D revision), `B` for the bottom-boot version: 16 Mbit (2 MB) parallel NOR flash, 3 V, 48-pin TSOP, ×8 or ×16 selected by its BYTE# pin. Details to confirm against the datasheet. | Program storage. Twice the 1 MB that the SPA2002 layout uses and that MAME gives the PAP2 (an SST39VF080). Hypothesis: only the first 1 MB is mapped or used (an address line not wired, or the firmware ignores the rest), and BYTE# is tied for ×8, since the ES3890F's flash bus is 8 bits wide (SPA3000 `hardware.md` §2.5). Bottom boot puts the small sectors at the low end, which matters for where the firmware can erase and write. | Read (partial); part and size from the part number; use Hypothesis |
 | U104 | Realtek `RTL8019AS` `F5C39G5` `LF20 TAIWAN` | Realtek RTL8019AS, 100-pin PQFP | Ethernet controller, as on the SPA3000 | Read |
 | X2 | `20.000H20` | 20.000 MHz crystal, HC-49 | RTL8019AS reference clock (the datasheet calls for 20 MHz) | Read; role Datasheet |
@@ -145,10 +159,12 @@ port is not known.
 |---|---|---|---|---|
 | U200, and its twin in the 150 block | `Si3215-FM` `0946CFK0LM` `KR` and `Si3215-FM` `0644CCKABW` `KR`, each with a circled e3 (lead-free) mark | Silicon Labs Si3215 ProSLIC, QFN | One FXS (PHONE) port each: line feed, ringing and codec, PCM bus for audio, SPI for control. How the Si3215 differs from the SPA3000's Si3210 (and MAME's PAP2's) is to read from the datasheet before writing a driver. | Read; role Hypothesis until the datasheet is read |
 | L150, L200 | `330` on both | 33 µH power inductors, the same marking as L2 on the SPA3000 | Hypothesis: each SLIC's DC-DC converter for the line battery voltage, as L2 on the SPA3000, each with a large electrolytic beside it | Read; role Hypothesis |
-| D150, D200 (underside) | `ES1D` on D200; D150 reads `ES1D` or `ES1B` | ES1-series fast-recovery rectifiers, SMA | Hypothesis: each converter's rectifier, as the ES1D on the SPA3000's underside; their numbers pair them with L150 and L200 | Read; role Hypothesis |
-| Q163, Q164, Q216, Q217 | `CZT5551` `CENTRAL` `K5D` on all four | Central Semiconductor CZT5551, a high-voltage NPN transistor in SOT-223, two per block | Hypothesis: part of each line's drive or the converter. The SPA3000's converter switch is a PNP (FZT955), so these do a different job or the Si3215 uses a different circuit; to check against the datasheet. | Read; role Hypothesis |
-| Q157, Q159, Q210, Q212 (underside) | `2L` | SOT-23 transistors, two under each block, the same marking as Q4–Q7 on the SPA3000's underside | Hypothesis: part of each line's circuit, by placement | Read; role Hypothesis |
-| Q209, Q211, and two more by the 150 block | Not read | SOT-23 transistors, two on the top side of each block | Unknown | Read (position) |
+| D150, D200 (underside) | `ES1D` on both | ES1D fast-recovery rectifiers, SMA | Hypothesis: each converter's rectifier, as the ES1D on the SPA3000's underside; their numbers pair them with L150 and L200 | Read; role Hypothesis |
+| Q163, Q164, Q216, Q217 | `CZT5551` `CENTRAL` `K5D` on all four | Central Semiconductor CZT5551, a high-voltage NPN transistor in SOT-223, two per block, along the right edge by the PHONE jacks | Hypothesis, strongly supported: the two NPN 5551s (the datasheet's Q5 and Q6, SOT-223) of each line's discrete linefeed, with the four `2L` PNPs below. The SPA3000's equivalents are Q8 and Q9, marked `G1`. | Read; role Hypothesis |
+| Q209, Q211 (top) and Q210, Q212 (underside); Q156, Q158 (top) and Q157, Q159 (underside) | `2L` on all eight | SOT-23. `2L` is the marking commonly used for the MMBT5401, a high-voltage PNP. Four per block: one pair on the top side between the Si3215 and the CZT5551s, and one pair on the underside, more or less behind it. | Hypothesis, strongly supported: the four PNP 5401s (the datasheet's Q1–Q4) of each line's discrete linefeed, as Q2–Q7 on the SPA3000, where four are also marked `2L`. With the two CZT5551s that makes the six transistors per line of the Si3210-family discrete linefeed (SPA3000 `hardware.md` §2.3) | Read; role Hypothesis |
+| Q214 (200 block), Q161 (150 block) | Q214 `1P`; Q161 not read | SOT-23, between the Si3215 and the inductor. `1P` is the marking commonly used for the MMBT2222A, an NPN. | Hypothesis: the 2222-type NPN that drives each DC-DC converter's switch, as in the Si3210 datasheet's BJT/inductor converter (SPA3000 `hardware.md` §2.3, L2 with Q1) | Read; role Hypothesis |
+| Q162 (150 block), Q215 (200 block) | Q162 `FZT` `955` `301`; Q215 not read, partly hidden by the electrolytic | Q162 is a Zetex FZT955 high-voltage PNP transistor in SOT-223, the same part as Q1 on the SPA3000. Q215 is the same size and shape in the same place in its block. | Hypothesis, strongly supported: each converter's switch, as Q1 on the SPA3000 and the PNP in the Si3210 datasheet's BJT/inductor converter | Read (Q162); Q215 Hypothesis |
+| Two tinned copper pads (underside) | — | Bare rectangles of solder-coated copper, one by C161 and one by C210, inside each block's outline | Hypothesis: heat-spreading pads for a power part on the other side | Read; role Hypothesis |
 | — | — | No DAA, no relay | The PAP2T has no LINE port (§1) | Read |
 
 ### 2.4 Power and LEDs
@@ -158,19 +174,26 @@ port is not known.
 | U11 | `AMS1117` `ADJ` `G1068` | AMS1117 adjustable low-dropout regulator, SOT-223, at the left edge between the RAM and the board marking, with C29, C30, C35 and C36 round it | One supply rail, its voltage set by two resistors. Hypothesis: one of 3.3 V (flash, RAM, logic) and the ES3890F's core (2.5 V on the SPA3000, from an adjustable 1117 there too). Measuring the outputs powered settles which. | Read; role Hypothesis |
 | U12 | `AMS1117` `ADJ` `G1068` | AMS1117 adjustable low-dropout regulator, SOT-223, beside the ES3890F, with R23 and another resistor marked `121` (120 Ω) next to it, C32, C37 and C39 | The other rail. The 120 Ω parts fit the usual upper resistor of a 1117 divider; the lower resistor, which fixes the voltage, is not yet identified. | Read; role Hypothesis |
 | D1 | Not legible | SMD diode beside U12 | Unknown | Read |
-| D4, D5, D101, LED2 | — | Four SMD LEDs along the front edge, left to right. LED2 is a larger part showing two dies. | Hypothesis: PHONE 1, PHONE 2, ETHERNET and Power, in the order of the front-panel windows (§1), with LED2 the bicolour Power LED (§1.1) | Read; roles Hypothesis |
+| PJ1 | — | The DC power jack, top left | 5 V input (§1) | Read |
+| FU1 | `0` on a green body | Chip part between PJ1 and M1 | Hypothesis: a fuse position, fitted with a 0 Ω link or a chip fuse | Read; part Hypothesis |
+| R4, L4 | R4 `000` (0 Ω); L4 an outline with two plated holes, empty | Overlapping footprints by the input choke | Hypothesis: a choice of a 0 Ω link or a through-hole inductor in the 5 V input; the link is fitted. The SPA3000 has 0 Ω links L12 and L13 in the same place. | Read; role Hypothesis |
+| R6 | Two empty pads beside PJ1 | — | Unfitted; role unknown | Read |
+| Input choke | Through-hole, with its winding visible, beside M1 | Inductor; designator hidden under it | Hypothesis: filtering in the 5 V input | Read; role Hypothesis |
+| D6, Q5, Q6 | D6 `Z3`; Q5 and Q6 not read | SOT-23, in a row below the input choke, with R25 `272` (2.7 kΩ) | `Z3` is in the style of a BZX84 Zener's marking; which voltage is not confirmed. Role unknown. | Read; part Hypothesis |
+| D4, D5, D101, LED2 | — | Four SMD LEDs along the front edge, left to right. LED2 is a larger part showing two dies. | PHONE 1, PHONE 2, ETHERNET and Power respectively: with the board sitting in the base, each LED is directly behind its window's label. LED2 is the bicolour Power LED (§1.1). | Read (photo of the board in the base) |
 
 ## 3. Open questions
 
-1. The markings §2 could not read: two characters of the RAM's part
-   number, and the flash's revision letter and speed. The flash's manufacturer and device ID, read
+1. The markings §2 could not read: the flash's revision letter and speed,
+   Q5, Q6, Q161 and Q215. The flash's manufacturer and device ID, read
    electrically, would settle its exact part; a first dump needs the
    flash read anyway (as for the SPA3000, its `flash.md` §7).
 2. How much of the 2 MB flash is wired and used: whether the ES3890F's
    flash window reaches the second megabyte (trace the top address line,
    A19 in ×8 terms, from U51 to the ES3890F), and how BYTE# is tied.
 3. What the Si3215 changes from the Si3210 that the SPA3000 and MAME's
-   PAP2 use, from its datasheet; and the role of the four CZT5551 NPNs.
+   PAP2 use, from its datasheet, including whether its discrete linefeed
+   and converter match the readings in §2.3.
 4. Whether the RAM is a 5 V part (KM416**C**), and if so how it is
    powered and driven.
 5. What the LED patterns in §1.1 mean (see the readings there), and
