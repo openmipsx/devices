@@ -288,8 +288,7 @@ starting at 0x46. The chip's interrupt reaches the CPU through the
 system-control block: reg 0x16 **bit 5** is the Ethernet interrupt,
 cascaded into 0x20004038 **bit 13** (§4). The firmware enables it with
 reg 0x15 = 0x08, reg 0x16 = 0xFF and 0x20004034 bit 13, and makes port 1
-bit 4 an input. The chip's INT0, its only connected interrupt output,
-goes to ES3890F pin 104, AUX2[4] (Measured; see
+bit 4 an input. The chip's INT0 interrupt output goes to ES3890F pin 104, AUX2[4] (Measured; see
 [`hardware.md`](hardware.md) §2.2), so port 1 bit 4 is that pin if port 1
 is AUX2 (Hypothesis, strong: port 0 is AUX1, §6). Which reg 0x15 bit masks reg 0x16
 bit 5 is not known. The handler reads reg 0x16, writes the value
