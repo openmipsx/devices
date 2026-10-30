@@ -3,7 +3,10 @@
 Status: unit arrived 2026-10-30. The closed case and the LEDs at
 power-on are recorded in [`hardware.md`](hardware.md), with photos in
 [`photos/`](photos/), and so are the stock web UI's versions: software
-5.1.6(LS), hardware 0.1.5, not provider-locked. Case not yet opened.
+5.1.6(LS), hardware 0.1.5, not provider-locked. The case is open: the
+board (`U54V016 REV.0`) has an ES3890F, an RTL8019AS, 2 MB of Samsung
+EDO DRAM, a 2 MB Macronix MX29LV160 flash (twice what the firmware
+layout uses) and two Silicon Labs Si3215s (`hardware.md` §2).
 
 What is known so far, from other sources:
 
@@ -32,7 +35,8 @@ In this order, so that nothing is lost before it is recorded:
    factory-reset yet: the installed version and any provider settings
    are evidence.
 3. **Case open, unpowered**: photograph the whole top side and the whole
-   underside, then close-ups of the processor and Ethernet chip, flash,
+   underside (done 2026-10-30, `hardware.md` §2), then close-ups (angled
+   shots and a flash close-up done the same day) of the processor and Ethernet chip, flash,
    RAM, each telephony chip, the regulators, and every header, jumper
    footprint and test point. Read each chip marking.
 4. **Unpowered, multimeter**: trace the headers and test points first
