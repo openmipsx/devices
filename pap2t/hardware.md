@@ -112,7 +112,9 @@ Silicon Labs Si3215. MAME's PAP2 has two Si3210s instead (SPA3000
 |---|---|---|
 | Board marking | Top side, left edge beside the RAM: `U54V016` / `REV.0 GP` / `500141`. `B-3` in the top right corner. | Read |
 | PCB maker's marking | Underside: `DYnamic` `MO-V0` `E150630` `94V-0`, with a UL recognised-component mark and a blank white patch | Read |
-| Mounting holes | Marked M2–M10 on the two sides; some are plated pads, some plain holes | Read |
+| M-numbered features | M1–M10, in three kinds. M1, M2, M3 and M4: large plated holes, each ringed by stitching vias (M4 partly under C164). M7 (the round pad beside V015, by U52A) and M8 (beside SW2) on the top side, and M9 and M10 on the underside: bare copper discs about 2 mm across in a mask-free ring, with no visible trace or hole, in a diagonal pair on each side. M5 and M6: small plain holes with no visible copper ring. | Read (photos) |
+| M-numbered roles | M1–M4 are mounting holes, grounded through their vias. M7–M10 are fiducials (pick-and-place alignment marks), not test points: the underside has its own pair because it carries SMT parts. M5 and M6 are tooling or locating holes. The shared `M` prefix is probably the CAD library's for mechanical parts. A fiducial should have continuity to no net; a reading on any of M7–M10 would make it a test point after all. | Hypothesis |
+| Headers | None. Nothing like the SPA3000's 2×18 U2 footprint (its `hardware.md` §2.1) is on either side, and no TP-labelled test points have been found. | Read (photos and by eye) |
 | Fixing in the case | As received, no screws held the board: it was kept in place mainly by the Ethernet and PHONE jacks through the rear panel, so it could shift against the underside of the case | Observed |
 | SW2 | Footprint by the PHONE 2 jack on the right edge: plated holes, no part fitted as far as the photo shows | Read; "unfitted" to check by eye |
 | V015 | Two small pads near M7, by the left edge beside the RAM | Read; role unknown |
