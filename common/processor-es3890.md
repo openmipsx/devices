@@ -148,7 +148,7 @@ ALU cycle.
 | 000 | 0x099 | `mstep` | If MSB(MD): Dest = (Src1 << 1) + Src2, else Dest = Src1 << 1. Then MD <<= 1 |
 | 000 | 0x166 | `dstep` | a = (Src1 << 1) \| MSB(MD); o = a − Src2. If MSB(o): Dest = a, MD <<= 1; else Dest = o, MD = (MD << 1) \| 1 |
 | 001 | 0x0C0 | `rotlb` | Dest = Src1 rotated left by (Src2 & 3) bytes |
-| 001 | 0x080 | `rotlcb` (manual); `shlv` in later firmware | Manual: Dest = Src1 rotated left by (~Src2 & 3) bytes. Later firmware (SPA2100, SPA2102, SPA9000, SPA942): a logical shift by a signed amount, see below. **Observed**, medium confidence |
+| 001 | 0x080 | `rotlcb` (manual); `shlv` in later firmware | Manual: Dest = Src1 rotated left by (~Src2 & 3) bytes. Later firmware (SPA2100, SPA2102, SPA9000, SPA942): a logical shift by a signed amount, see below. **Observed**, medium confidence. Not executed in any simulator start-up run (2026-10-30) |
 | 001 | 0x180 | `shav` | Shift by a signed amount: if Src2 ≥ 0, Dest = Src1 << Src2; if Src2 < 0, Dest = Src1 >> −Src2, arithmetic. Only in later firmware (SPA2100, SPA2102, SPA9000, SPA942). **Observed**, high confidence, for −31 ≤ Src2 ≤ 31; see below |
 | 001 | 0x200 \| amount | `sh` | Funnel shift: Dest = low 32 bits of ((Src2 : Src1) >> n) |
 | 001 | 0x100 \| amount | `asr` | Dest = Src1 >> n, arithmetic. Src2 = r0 |
@@ -193,6 +193,14 @@ open. Earlier tools (ghidra-mipsx's notes) call 0x180 `shlv` with
 Dest = Src1 << (Src2 & 31); that is right for counts 0–31 and wrong
 for negative ones.
 
+Run on the simulator (2026-10-30), 0x180 executed 66 times in five
+start-up runs of the later images, with counts 0–24, and 325 times in a
+sixth (273 negative, −7…−1). No fault, no hardware-rule hazard, no count
+outside −31…31. These runs don't depend on the result (replacing it
+with a no-op leaves five of the six paths unchanged), so they don't
+test the reading, and the mark stays Observed. The negative counts all
+shift non-negative values, where arithmetic and logical agree.
+
 ## 6. Compute-immediate instructions (TY = 11)
 
 | OP | Instruction | Operation |
@@ -203,7 +211,7 @@ for negative ones.
 | 010 | `movtos Src1,Spec` | Special register = Src1 |
 | 101 | `jpc` | Func = 0x003. Jump to PC-4 (exception return chain) |
 | 111 | `jpcrs` | Func = 0x003. As `jpc`, and restores the PSW |
-| 001 | `andi Src1,#imm,Dest` | Every OP 001 word except 0xCFC00000. Dest (Src2 field, bits 21–17) = Src1 & SignExtend(imm17). Only in later firmware (SPA2100, SPA2102, SPA9000, SPA942), 2,500–4,000 times per application, where it replaces a constant built in a register and a register `and`. **Observed**, high confidence: in matched functions of the same firmware version built by the older and the newer toolchain, the older code at about 1,300 places computes exactly Src1 & SignExtend(imm17); no other reading (OR, XOR, AND-NOT, set-less-than, zero-extended immediate) explains any of them. The immediate is sign-extended from bit 16: a field of 0x10000 masks with 0xFFFF0000, and −2 and −4 clear only the low bits. No code uses it with Src1 = r31 or Dest = r0 |
+| 001 | `andi Src1,#imm,Dest` | Every OP 001 word except 0xCFC00000. Dest (Src2 field, bits 21–17) = Src1 & SignExtend(imm17). Only in later firmware (SPA2100, SPA2102, SPA9000, SPA942), 2,500–4,000 times per application, where it replaces a constant built in a register and a register `and`. **Observed**, high confidence, and **Simulated**: in matched functions of the same firmware version built by the older and the newer toolchain, the older code at about 1,300 places computes exactly Src1 & SignExtend(imm17); no other reading (OR, XOR, AND-NOT, set-less-than, zero-extended immediate) explains any of them. The immediate is sign-extended from bit 16: a field of 0x10000 masks with 0xFFFF0000, and −2 and −4 clear only the low bits. No code uses it with Src1 = r31 or Dest = r0. Simulated (2026-10-30): with `andi`, section B of SPA2102 5.1.6 and SPA942 4.1.15 runs on the simulator to the same fatal-error halt as the same-version older builds (PAP2T 5.1.6(LS), SPA941 4.1.15), which have no OP 001 word. It takes the same route (20 and 21 of 28 calls in matched functions, in order), and its progress is within 3% and 7% (53,900 against 55,500, and 59,800 against 55,800 instructions). With OP 001 as OR, both fault on a runaway pointer; as a no-op, both take a different, earlier halt (after 3,100 and 8,300 instructions); with a zero-extended immediate, both jump to address 0. Peripherals were backed by RAM in these runs, so the shared halt comes from the peripheral model, not from the hardware's own state |
 | 001 | `hsc` | Word 0xCFC00000 (Src1 = r31, rest 0). Halt, from the manual and MAME; not seen in the SPA3000 application. Whether other Src1 = r31 encodings also halt is unknown |
 | 110 | `trap vector` | Func bits 2–0 = 011, bit 11 = 0; bits 10–3 hold the one's complement of the vector. Jumps to vector × 8 (word address) |
 
