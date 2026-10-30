@@ -86,7 +86,7 @@ thing).
 | 2 | Read at start-up: bit 0 is a second board-mode strap. Written 0x39 | Observed; strap Hypothesis |
 | 3 | **Watchdog control**: bit 7 enables it (§5). The firmware writes 0xBC; it writes 0xFE and stops kicking to force a reset | Observed; Hypothesis, strong |
 | 4, 5 | **Port 0** data and direction (§6) | Observed |
-| 6, 7 | Port 1 data and direction | Observed |
+| 6, 7 | Port 1 data and direction. Port 1 bit 4 is pin 104, AUX2[4], so port 1 is probably AUX2 (§8) | Observed; pin Measured; port 1 = AUX2 Hypothesis |
 | 0x15 | Interrupt enable mask for this block; bit 3 set when interrupts are enabled. Written 0x08 | Observed |
 | 0x16 | Interrupt status, write 1 to clear. Written 0xFF at enable. Bit 5 is the RTL8019AS interrupt (§8) | Observed; Hypothesis, strong |
 | 0x22, 0x23, 0x40, 0x63, 0x64 | Mode-dependent set-up (§7 step 11) | Observed values; roles unknown |
@@ -288,8 +288,11 @@ starting at 0x46. The chip's interrupt reaches the CPU through the
 system-control block: reg 0x16 **bit 5** is the Ethernet interrupt,
 cascaded into 0x20004038 **bit 13** (§4). The firmware enables it with
 reg 0x15 = 0x08, reg 0x16 = 0xFF and 0x20004034 bit 13, and makes port 1
-bit 4 an input (presumably the INT pin; which reg 0x15 bit masks reg
-0x16 bit 5 is not known). The handler reads reg 0x16, writes the value
+bit 4 an input. The chip's INT0, its only connected interrupt output,
+goes to ES3890F pin 104, AUX2[4] (Measured; see
+[`hardware.md`](hardware.md) §2.2), so port 1 bit 4 is that pin if port 1
+is AUX2 (Hypothesis, strong: port 0 is AUX1, §6). Which reg 0x15 bit masks reg 0x16
+bit 5 is not known. The handler reads reg 0x16, writes the value
 back, writes 0x20004024 = 0, and then, while ISR & 0x1F is non-zero,
 writes the ISR value back to clear it and acts:
 
