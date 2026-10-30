@@ -39,8 +39,8 @@ the opposite of the manual's convention.
 | TY | 31–30 | 00 branch, 01 compute, 10 memory, 11 compute-immediate |
 | OP / COND | 29–27 | |
 | Src1 | 26–22 | |
-| Src2 | 21–17 | Holds Dest for loads, `addi` and `jspci` (manual Appendix II "starred" instructions) |
-| Dest | 16–12 | Compute instructions and `movfrs` |
+| Src2 | 21–17 | Holds Dest for loads, `addi`, `jspci` and `movfrs` (manual Appendix II "starred" instructions) |
+| Dest | 16–12 | Compute instructions |
 | Comp Func | 11–0 | Compute instructions |
 | Offset / Immed | 16–0 | 17-bit signed: memory and compute-immediate instructions |
 | SQ | 16 | Branches: 1 = squash the delay slots if the branch is not taken |
@@ -143,7 +143,7 @@ for array indexing. Assemblers should show n, as in the manual's examples
 |---|---|---|
 | 100 | `addi Src1,#imm,Dest` | Dest (Src2 field) = Src1 + SignExtend(imm17) |
 | 000 | `jspci Src1,#imm,Dest` | Jump to word address (Src1 + SignExtend(imm17)) modulo 2³⁰, after two delay slots that always execute. Dest (Src2 field) = jspci word address + 3, which is the return address |
-| 011 | `movfrs Spec,Dest` | Dest (bits 16–12) = special register; Spec in Func bits 2–0 |
+| 011 | `movfrs Spec,Dest` | Dest (Src2 field, bits 21–17) = special register; Spec in Func bits 2–0; bits 16–12 are 0. See "`movfrs` destination" below |
 | 010 | `movtos Src1,Spec` | Special register = Src1 |
 | 101 | `jpc` | Func = 0x003. Jump to PC-4 (exception return chain) |
 | 111 | `jpcrs` | Func = 0x003. As `jpc`, and restores the PSW |
@@ -152,6 +152,25 @@ for array indexing. Assemblers should show n, as in the manual's examples
 
 Special registers: 1 = PSW, 2 = MD, 4 = PC-4 when read and PC-1 when
 written.
+
+**`movfrs` destination (Observed; corrected 2026-10-30).** `movfrs` keeps
+its destination register in the Src2 field, bits 21–17, like the other
+compute-immediate instructions. Bits 16–12 are 0. Earlier versions of this
+document put it in bits 16–12, which was wrong. Evidence:
+
+- Every `movfrs` word in the SPA3000 application (58 of them) has
+  bits 16–12 = 0 and a register number in bits 21–17. For example
+  0xD8040001 is `movfrs psw` into r2.
+- The code only makes sense this way: the interrupt-mask sequence reads
+  the PSW, ORs in bit 4 and writes it back with `movtos` through the
+  register in bits 21–17 (§10).
+- **Simulated**: run on a simulator with the old decoding, the
+  application corrupts its PSW within its first 60,000 instructions; with
+  this decoding it runs normally for 15 simulated seconds. About 66,000
+  `movfrs` were executed in its first 20 million cycles.
+
+Assemblers, disassemblers, compilers and simulators written from the old
+text need the same change. `movtos` is unaffected (Src1 is the source).
 
 How the compiler uses `jspci`, all **Verified** in the application:
 
@@ -252,3 +271,40 @@ counts only.
 Not exercised by any vendor path that could be run: `mstart`, `mstep`,
 `dstep`, moves to and from MD, `trap`, and shifts by 32. Facts about
 those still rest on the manual alone.
+
+## 10. Interrupts (Hypothesis, strongly supported)
+
+From reading the SPA3000 application's interrupt handler and its
+critical sections, and from running the application on a simulator with
+a model of the peripherals it needs (**Simulated**; the interrupt entry
+in that model was written to match the handler, so the simulation shows
+consistency, not proof). The interrupt controller and timer registers are
+in [`../spa3000/peripherals.md`](../spa3000/peripherals.md).
+
+- **Vector.** Interrupts enter at **word address 0**. The application
+  installs four instructions there at start-up: a no-op, a jump to its
+  handler, and two no-ops (the jump's delay slots).
+- **Mask.** PSW bit 4 (value 0x10) masks interrupts. That is where the
+  manual puts its M bit, so this confirms the manual's layout for that
+  bit. The reset code sets PSW = 0xF3 before anything else. Setting it,
+  with `movfrs psw`, OR 0x10, `movtos psw`, is the application's
+  critical-section primitive. Start-up runs with it set and clears it once
+  the timer is programmed.
+- **PC chain.** On entry the PC chain holds three PCs: the instructions
+  that were in the pipeline and did not complete. The handler saves them
+  with three `movfrs pcm4` (special register 4, read), restores them with
+  three `movtos pcm1` (special register 4, written), and returns with
+  `jpcrs`, `jpc`, `jpc`, which restarts the three in order. It also saves
+  MD.
+- **A store at the head of the chain has already been done.** Before
+  returning, the handler checks whether the first saved PC holds a word
+  store, byte store or halfword store. If it does, it restarts a no-op in
+  its place (the one at word 0). So on the hardware a store at the head
+  of the chain has passed its memory stage when the interrupt is taken.
+  A handler that restarts it anyway does the store twice: harmless for
+  RAM, but not for an I/O register with side effects.
+- The handler returns with `jpcrs`, so the PSW saved at entry is
+  restored; how the hardware saves it on entry is not known.
+- Not known: whether exceptions (other than `trap`) share the vector,
+  what the hardware does with the PSW on entry, and how many cycles entry
+  takes.
