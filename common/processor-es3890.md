@@ -148,7 +148,8 @@ ALU cycle.
 | 000 | 0x099 | `mstep` | If MSB(MD): Dest = (Src1 << 1) + Src2, else Dest = Src1 << 1. Then MD <<= 1 |
 | 000 | 0x166 | `dstep` | a = (Src1 << 1) \| MSB(MD); o = a − Src2. If MSB(o): Dest = a, MD <<= 1; else Dest = o, MD = (MD << 1) \| 1 |
 | 001 | 0x0C0 | `rotlb` | Dest = Src1 rotated left by (Src2 & 3) bytes |
-| 001 | 0x080 | `rotlcb` | Dest = Src1 rotated left by (~Src2 & 3) bytes |
+| 001 | 0x080 | `rotlcb` (manual); `shlv` in later firmware | Manual: Dest = Src1 rotated left by (~Src2 & 3) bytes. Later firmware (SPA2100, SPA2102, SPA9000, SPA942): a logical shift by a signed amount, see below. **Observed**, medium confidence |
+| 001 | 0x180 | `shav` | Shift by a signed amount: if Src2 ≥ 0, Dest = Src1 << Src2; if Src2 < 0, Dest = Src1 >> −Src2, arithmetic. Only in later firmware (SPA2100, SPA2102, SPA9000, SPA942). **Observed**, high confidence, for −31 ≤ Src2 ≤ 31; see below |
 | 001 | 0x200 \| amount | `sh` | Funnel shift: Dest = low 32 bits of ((Src2 : Src1) >> n) |
 | 001 | 0x100 \| amount | `asr` | Dest = Src1 >> n, arithmetic. Src2 = r0 |
 
@@ -165,6 +166,33 @@ and the most common such case is e = 2 (multiply by 4), as you'd expect
 for array indexing. Assemblers should show n, as in the manual's examples
 (`sh r3,r0,r3,#24` extracts the top byte).
 
+**Shifts by a register amount (later firmware; Observed 2026-10-30).**
+Func 0x180 and 0x080 take the value in Src1 and a signed count in
+Src2, with Dest in bits 16–12 like the other compute instructions.
+Neither collides with `asr` (Func 0x100 | amount), whose `dddd` field
+is one-hot and never 0. Earlier firmware has neither: its compiler
+called library routines that shift left, arithmetically right or
+logically right by Src2 & 31. In matched functions of the same firmware
+version built by the older and the newer toolchain:
+
+- Where the older code shifts left, the newer code uses 0x180 with the
+  count unchanged. Where it shifts right arithmetically, the newer code
+  always negates the count first and uses 0x180 (33 of 33 places,
+  sometimes folded into a subtraction or done earlier). Run on our own
+  interpreter, the older code agrees with the signed-amount reading of
+  0x180 at the right-shift places, and with no left-only, logical or
+  unsigned reading.
+- Where the older code shifts right logically, the newer code negates
+  the count and uses 0x080. The rotate reading does not fit; the
+  logical one does. Few places (36–52 words per image), so medium
+  confidence.
+
+Counts outside −31…31 are unknown: the code never produces them, so
+whether the hardware uses 5 bits, 6 bits or the whole register is
+open. Earlier tools (ghidra-mipsx's notes) call 0x180 `shlv` with
+Dest = Src1 << (Src2 & 31); that is right for counts 0–31 and wrong
+for negative ones.
+
 ## 6. Compute-immediate instructions (TY = 11)
 
 | OP | Instruction | Operation |
@@ -175,7 +203,8 @@ for array indexing. Assemblers should show n, as in the manual's examples
 | 010 | `movtos Src1,Spec` | Special register = Src1 |
 | 101 | `jpc` | Func = 0x003. Jump to PC-4 (exception return chain) |
 | 111 | `jpcrs` | Func = 0x003. As `jpc`, and restores the PSW |
-| 001 | `hsc` | Word 0xCFC00000 (Src1 = r31, rest 0). Halt, from the manual and MAME; not seen in the SPA3000 application. Other OP 001 encodings are **not** undefined: firmware for the SPA2100, SPA2102, SPA9000 and SPA942 executes them during normal start-up (**Simulated**; thousands of them in each image, against a few hundred in the older images, consistent with chance matches in data). Their function is unknown |
+| 001 | `andi Src1,#imm,Dest` | Every OP 001 word except 0xCFC00000. Dest (Src2 field, bits 21–17) = Src1 & SignExtend(imm17). Only in later firmware (SPA2100, SPA2102, SPA9000, SPA942), 2,500–4,000 times per application, where it replaces a constant built in a register and a register `and`. **Observed**, high confidence: in matched functions of the same firmware version built by the older and the newer toolchain, the older code at about 1,300 places computes exactly Src1 & SignExtend(imm17); no other reading (OR, XOR, AND-NOT, set-less-than, zero-extended immediate) explains any of them. The immediate is sign-extended from bit 16: a field of 0x10000 masks with 0xFFFF0000, and −2 and −4 clear only the low bits. No code uses it with Src1 = r31 or Dest = r0 |
+| 001 | `hsc` | Word 0xCFC00000 (Src1 = r31, rest 0). Halt, from the manual and MAME; not seen in the SPA3000 application. Whether other Src1 = r31 encodings also halt is unknown |
 | 110 | `trap vector` | Func bits 2–0 = 011, bit 11 = 0; bits 10–3 hold the one's complement of the vector. Jumps to vector × 8 (word address) |
 
 Special registers: 1 = PSW, 2 = MD, 4 = PC-4 when read and PC-1 when
