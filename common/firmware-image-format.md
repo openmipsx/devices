@@ -555,7 +555,15 @@ below. Section A also rewrites the record, with the sequence number
 increased, when its configuration store is compacted
 ([`flash.md`](../spa3000/flash.md) §4). Ordinary parameter saves append
 to the store and leave the record alone (Observed, Medium; an earlier
-reading said every save rewrote it). An earlier guess,
+reading said every save rewrote it). If section A starts with both
+boot-record blocks erased, it writes a record in sector 0 at start-up,
+and that record has **no section slots** (Simulated: the application on
+a board model; [`peripherals.md`](../spa3000/peripherals.md) §9). The
+next start then goes through step 3 of the order above, and the type 1
+section, B, wins the scan. A record built from this section, with
+slots for B at 0x20000 and A at 0x50000, makes the selector start A
+on every later start (Simulated), so the layout given here is enough to
+build a working record. An earlier guess,
 that section C occupies sector 0 and its zero first 0x380 bytes hold the
 first boot record, is superseded by the placement above.
 
@@ -784,7 +792,15 @@ section B to run. The boot selector chooses only from flash contents
 (§5), so the application cannot restart the unit into section B. The
 search followed the string references, the install routine, the
 boot-record writers and the restart path. A path through computed
-addresses cannot be ruled out.
+addresses cannot be ruled out. One exception follows from the flash
+contents alone: if the application found both boot-record blocks erased
+when it started, the record it wrote has no slots, and its next restart
+starts B (§5, "Where the boot records come from"; Simulated).
+
+The application also restarts to **apply new configuration**: settings
+saved from the web UI are stored at once but take effect only after a
+restart, which the application makes only when the telephony ports are
+idle (Simulated; [`peripherals.md`](../spa3000/peripherals.md) §9).
 
 ## 8. Processor
 
@@ -818,7 +834,11 @@ version more likely refers to the SPA3000 than to the IP3000.
 
 Section C has been decompiled (its boot selector, §5) and its loader stub
 disassembled (§4.5, §4.6); section A has been decompiled in full. The
-chip's second core has not been examined.
+chip's second core has not been examined. Running the application on a board model
+shows an on-chip DSP behind registers 0x20008200–0x2000822C that makes
+the audio samples; it is probably that second core, or part of it, and
+the application does not seem to load a program into it (Hypothesis;
+[`peripherals.md`](../spa3000/peripherals.md) §8, "Audio path").
 
 Toolchain: no mainstream compiler or assembler supports MIPS-X (none in
 GNU binutils, GCC or LLVM as of 2026-10). Ghidra has no stock support

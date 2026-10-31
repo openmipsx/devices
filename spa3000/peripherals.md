@@ -1,8 +1,8 @@
 # SPA3000 peripherals and start-up
 
-Status: draft, 2026-10-30. Dirty-side findings written as facts for the
+Status: draft, 2026-10-31. Dirty-side findings written as facts for the
 clean side. Contains no vendor code. See [`../clean-room.md`](../clean-room.md)
-for the process and the provenance rows of 2026-10-29 and 2026-10-30.
+for the process and the provenance rows of 2026-10-29 to 2026-10-31.
 
 This is how the stock firmware drives the ES3890F's on-chip registers and
 the board's devices: addresses, values, order and timing. It is what the
@@ -58,8 +58,8 @@ Only what the firmware's use makes reasonably clear. Offsets are from
 | 0x4038 | Interrupt status (§4) | Observed |
 | 0x6000–0x610C | Cleared at start-up (§7) | Observed |
 | 0x8000, 0x8100, 0x8104 | Clock or bus timing; reset code writes 0x8100 = 0x384, 0x8104 = 0x92 | Observed values; role Hypothesis |
-| 0x8200–0x822C | A command engine: command words to 0x8214, then a wait for 0x8224 bit 0; 0x822C is a FIFO level (`& 0x3F`) | Observed; role Hypothesis |
-| 0x8400–0x86FF | DMA columns at stride 0x100: each column offset (+0x28, +0x30, +0x38) holds count, address low and address high in the 0x84, 0x85 and 0x86 pages. Writing address high starts the column | Observed; start on address-high write Simulated |
+| 0x8200–0x822C | The port of an on-chip **DSP coprocessor** (§8, "Audio path"): command words to 0x8214, then a wait for 0x8224 bit 0; 0x822C is a FIFO level (`& 0x3F`) | Observed; role Hypothesis |
+| 0x8400–0x86FF | DMA columns at stride 0x100: each column offset (+0x28, +0x30, +0x38) holds count, address low and address high in the 0x84, 0x85 and 0x86 pages. Writing address high starts the column. The count is a negated length. Address high holds bits 31–11 of the RAM address; address low holds bits 10–2 as a word offset in its bits 8–0 (the d2a column also sets bit 11 there, meaning unknown) | Observed; start on address-high write Simulated; address split Hypothesis, strong (read this way, the DMA columns and the DSP's block moves, §8, name the same buffers) |
 | 0x87C0 | DMA column busy bits: bit 10 for column +0x28, bit 12 for column +0x30 (§8) | Observed use; meaning Hypothesis, strong |
 | 0x87CC | DMA column interrupt enables (same bit positions) | Observed |
 | 0x87D0–0x87EC | Engine control; 0x87E0 gets 0x6E23 then 0x6E21 (a pulse on bit 1) | Observed values; role unknown |
@@ -251,17 +251,19 @@ path starts repeats rows 1–11 itself.
 | Time | What |
 |---|---|
 | 0.16 ms | Flash identification at 0x18000000 (nothing) and 0x1C000000 ([`flash.md`](flash.md)) |
-| 0.07–0.10 s | Flash maintenance. With erased boot-record sectors the application erases sector 0 and writes a new boot record (§9) |
+| 0.07–0.10 s | Flash maintenance. With erased boot-record sectors the application erases sector 0 and writes a new boot record (§9). With a valid boot record it writes nothing, and the first DHCPDISCOVER comes at 0.083 s instead of 0.117 s |
 | 0.106 s | 0x20008000 = 0 then 1, command words to 0x20008214, wait for 0x20008224 bit 0 |
 | 0.108 s | Port 0 set-up: data 0x67, then direction 0x67 (§6) |
 | 0.111 s | Port 0 bit 0 → 0 (Ethernet reset released) |
 | 0.114–0.117 s | RTL8019AS reset and NE2000 initialisation (§8). System control reg 6 = 0x10, reg 7 = 0, reg 0x15 = 0x08, reg 0x16 = 0xFF. 0x20004034 = **0x2002** (adds bit 13) |
+| 0.117 s | One transmit with a byte count of 0, then the first DHCPDISCOVER (§8, "Network behaviour"), without waiting for the link |
 | 0.19 s | DMA column +0x30 restarted; 0x200087CC = 0x1000. Port 0 bits 1 and 2 → 0; bit 1 → 1 about 12 µs later |
 | 0.20 s | Port 0 bit 3 driven high (LEDs off) |
 | 0.22 s | Si3210 traffic starts on 0x20004030 (§8) |
 | 0.37 s | 0x200087CC = 0x1400, 0x20004034 = **0x2082** (adds bit 7) |
-| 0.39 s | Port 0 bit 2 → 1 (Si3050 reset released); Si3050 frames with port 0 bit 5 as chip select |
+| 0.39 s | Port 0 bit 2 → 1 (Si3050 reset released); Si3050 set-up with port 0 bit 5 as chip select, ending with the line side powered up (§8, "Si3050 DAA") |
 | 0.73 s | Status LEDs first on, then toggled every 0.50 s |
+| 1.39 s | Si3050 line check: LINE port off hook for about 150 ms (§8) |
 | 1.44 s | Port 0 bit 4 driven high (relay K1 driver) |
 
 ## 8. Devices
@@ -305,6 +307,32 @@ writes the ISR value back to clear it and acts:
 
 While transmitting it holds IMR = 0.
 
+**Network behaviour** (Simulated: the application on a Linux TAP with a
+DHCP server, from reset). For a replacement firmware these are what
+the stock firmware does, not requirements:
+
+- **A zero-length transmit at start-up.** Before its first DHCPDISCOVER
+  the firmware issues one transmit command with a byte count of 0. What
+  the RTL8019AS puts on the wire for that is not known (Hypothesis:
+  nothing, or a runt). A simulator's Ethernet model should accept it
+  without failing; new firmware need not copy it.
+- **DHCP does not wait for the link.** The first DHCPDISCOVER (342
+  bytes) goes out at 0.117 s (0.083 s when the flash has a valid boot
+  record, §7.4) even while the CONFIG0 link check reports no link (as
+  the model's did), and
+  is retried at about 2.8 s if unanswered. An offer is answered with a
+  DHCPREQUEST within about 0.5 ms. After the lease it sends two
+  gratuitous ARPs for its own address.
+- **The packet that causes an ARP miss is dropped.** When the firmware
+  has to reply to a host whose MAC it does not know, it sends an ARP
+  request and discards the packet it was answering; it does not queue
+  it. So the first echo request from a host not yet in its ARP cache
+  goes unanswered (4 of 5 pings answered, about 0.6 ms each).
+  Presumably the same holds for the first packet of any other exchange
+  with such a host (Hypothesis).
+- The web server was answering on port 80 by 1.7 s, the first time it
+  was asked.
+
 **Si3210 and Si3050 control bus** (Observed; Simulated). Bit-banged on
 0x20004030: bits 1, 2 and 3 are data, Si3210 chip select (active low) and
 clock, and bits 5–7 are written alongside them as output enables. Frames
@@ -314,7 +342,79 @@ addressed without the daisy-chain prefix throughout. The firmware
 identifies it by direct register 8 reading 0x02 and register 11 reading
 0x33, the datasheet reset values, and stops with a fatal error if they do
 not match. The Si3050 uses the same lines with port 0 bit 5 as its chip
-select (§6).
+select (§6; details below).
+
+**Si3210 reset and restart** (Simulated; Datasheet for the chip). The
+firmware pulses RESET# (port 0 bit 1, §6) once per start, at 0.19 s,
+before the identification check above. Its set-up later writes direct
+register 8 to 0x00, so the check passes on a second start only because
+that start's RESET# pulse puts the register back to 0x02. A soft
+restart of the unit (§9) leaves the Si3210 powered, and the restarted
+firmware relies on the pulse: in the simulation, before RESET# was
+modelled, the restarted firmware read DR8 = 0x00 and stopped in its
+fatal-error path. New firmware should pulse RESET# on every start and
+not assume the SLIC's registers are at their reset values otherwise.
+Whether the ES3890F's own reset also resets the Si3210 on the board
+is not known (pin 109 is a plain AUX pin, [`hardware.md`](hardware.md)
+§2.3).
+
+**Si3210 set-up** (Simulated, from the registers the firmware leaves
+set; meaning from the datasheet):
+
+- PCM: DR1 = 0x3D, **16-bit linear** samples with PCM enabled; transmit
+  start count (DR2, DR3) 2 and receive start count (DR4, DR5) 0, in PCLK
+  periods.
+- Loop-closure debounce DR69 (LCDI) = 0x18, 30 ms; the loop-closure
+  threshold indirect register LCRT is written 0x1000.
+- After the set-up the linefeed (DR64) is 1, forward active.
+- **The firmware polls for the hook switch**: it reads DR68 (LCR) from
+  its tick and does not take the chip's interrupt. It never clears LCIP
+  in DR19, so if INT is wired, it would stay asserted after the first
+  hook change (it enables that interrupt: LCIP did set). When the phone
+  goes off hook, LCR sets after the 30 ms debounce, and the firmware then
+  writes DR92 = 0xFF and writes the linefeed as forward active.
+- When the LINE port shows a ring (Si3050 register 5 ring-detect bits),
+  the firmware rings the PHONE port: DR64 = 4 (ringing) for about 2 s at
+  a time, and DR64 = 2 (forward on-hook transmission) once between
+  rings. Seen only in a run where every DAA read returned 0xFF, so the
+  ring was not real and the cadence means little.
+
+**Si3050 DAA** (Hypothesis for the wiring, from the firmware's traffic
+alone; Datasheet for the chip; Simulated for the sequence). The CS# and
+RESET# pins are Measured ([`hardware.md`](hardware.md) §2.3).
+
+- It shares the Si3210's data line (bit 1) and clock (bit 3) on
+  0x20004030, with bit 5 as the data line's output enable as before. Its
+  chip select is port 0 bit 5 and its RESET# port 0 bit 2, both active
+  low (§6).
+- **SDI and SDO are wired together** on bit 1: for a read, the firmware
+  releases the line (bit 5 = 0) for the data byte and samples the chip's
+  output there. With both chips on one released line, a line nobody
+  drives reads 1 (Hypothesis: a pull-up or the Si3210's released SDO).
+- The firmware drives it as an **8-bit controller** in the datasheet's
+  sense: CS# rises between the control, address and data bytes of each
+  operation. Control byte 0x20 for a write and 0x60 for a read, channel
+  0, no broadcast.
+- **Set-up sequence**: RESET# low from 0.19 s for about 0.197 s, high,
+  then a short second low pulse; a software reset (register 1, SR); the
+  configuration writes (line interface, ring validation, gains, PCM start
+  counts); then register 6 = 0x00, which clears PDL and powers up the
+  line side, at 0.39 s. Register 33 ends at 0x39 (PCM enabled). In a
+  14.8 s run the firmware wrote 21 times in all, to registers 1, 5, 6,
+  16–18, 22–24, 26, 30, 31 and 33–39.
+- It **never reads the revision registers** (11 and 13); it reads only
+  registers 5, 28 (LCS2) and 29 (LVS). So nothing in the firmware tells
+  us the board's chip revisions.
+- **Line check**: at 1.39 s it takes the line off hook (register 5),
+  reads LCS2 about 150 ms later, then goes back on hook with ONHM set
+  (register 5 = 0x08). From about 1.55 s, after a burst of about 110
+  reads, it reads LCS2, LVS and register 5 once per 10 ms tick; 4,324
+  reads in a 14.8 s run.
+- Not seen: the DAA's interrupt, ring handling past the ring-detect
+  bits, caller ID, or PCM audio through it (none of these were modelled).
+
+Times on this bus are set by busy-wait loops between the 10 ms ticks, so
+the bit timing is a lower bound (see the status marks at the top).
 
 **Flash**: identified by the AMD autoselect sequence; see
 [`flash.md`](flash.md).
@@ -324,14 +424,80 @@ coding itself, on the MIPS-X core, to and from 16-bit linear samples; no
 peripheral is involved. Its encoder is bit-exact with ITU-T G.711 for all
 65,536 inputs of both laws, keeping the top 14 (µ-law) or 13 (A-law) bits
 of each sample. Its decoder returns the G.711 output values scaled to
-16 bits. So the Si3210's PCM interface is presumably used in a linear
-mode (Hypothesis), and new firmware needs its own G.711 coder.
+16 bits. The Si3210 is programmed for 16-bit linear PCM (above, Simulated),
+which fits, and new firmware needs its own G.711 coder.
+
+**Audio path and the 0x8200 DSP** (Hypothesis, strong; register traffic
+Simulated). The 0x20008200 block is the port of a **DSP coprocessor**
+inside the ES3890F, not a plain command engine, and it, not the MIPS-X
+core, writes the samples into the audio buffers that the DMA columns
+carry to and from the codecs:
+
+| Offset | Role |
+|---|---|
+| 0x8214 | Command word. High byte classes seen: 0x40, 0x41, 0x48, 0x50, 0x51 and 0x58 are **block moves** between RAM and the DSP's own memory, with an offset in that memory in the low byte; 0x18 and 0x19 look like "run" commands; 0x01, 0x02, 0x08 and 0x10 are also used, roles unknown |
+| 0x8200 | Block-move length, written as a negated count (for example −40 or −160) |
+| 0x8208, 0x820C | RAM address of a block move, split as for the DMA columns' address low and high (§2) |
+| 0x8204, 0x8218 | Written often; roles unknown |
+| 0x8224 | Ready: bit 0, polled after commands |
+| 0x822C | FIFO level, read `& 0x3F` |
+
+- **Cadence**: the block moves run from the 10 ms tick. In a 14.8 s run
+  there were about 53,500 block moves, about 36 per tick. Among them are
+  moves of 160 words into the d2a (playback) buffers.
+- **The audio buffers**: the d2a column +0x30 alternates between two buffers 0x500
+  bytes apart with a count of 672; column +0x28 (a2d, capture) cycles
+  four buffers of 80 words, one word per 8 kHz frame for 10 ms
+  (Hypothesis: the count unit is a 32-bit word; 672 does not divide
+  evenly into 80 frames, so d2a's layout is not known).
+- **Its program is not loaded through this port**: at start-up the
+  firmware writes only five command words before the first ready wait
+  (§7.4, 0.106 s). So the DSP probably runs from on-chip ROM (Hypothesis).
+  How to load another program into it, if that is possible at all, is
+  not known.
+- **Consequence**: with the DSP's registers answering "ready" and "FIFO
+  empty" and no data moving, the d2a buffers stay all zero after the
+  phone goes off hook, and no tone appears anywhere in RAM. So tones
+  (dial tone at least) are presumably generated in the DSP. The audio path cannot be
+  simulated without a model of the DSP, which would need its instruction
+  set and ROM, neither of which is available. A capture of the PCM
+  highway on the board (P6) is the way to learn the frame layout.
+  New firmware has two choices: drive the DSP as the stock firmware does,
+  once its commands are understood, or bypass it and fill the DMA
+  buffers from the MIPS-X core (whether the columns work without the DSP
+  is not known).
 
 ## 9. Side effects to know before running stock firmware
 
 - If both boot-record sectors are erased, the stock application rewrites
   sector 0 during start-up (Simulated). Do not run it against a flash
-  whose boot sectors are blank unless that is wanted.
+  whose boot sectors are blank unless that is wanted. The record it
+  writes then has **no section slots** (Simulated), which matters at the
+  next restart (below).
+- **New configuration is applied by restarting** (Simulated). Saving
+  settings from the web UI (line 1's proxy, user and password were
+  tested) stores them in flash at once, but the firmware applies them
+  only by restarting the unit, and only once it is **idle**: no line in
+  use, no ring. With the telephony ports idle, the restart came about
+  3 s after the save. While the LINE port appeared to ring (every DAA
+  read returning 0xFF), it never came, and a reboot requested from the
+  web UI was likewise deferred. The restart goes through the boot code
+  and the boot selector from the start, like a reset
+  ([`../common/firmware-image-format.md`](../common/firmware-image-format.md)
+  §5), and the restarted firmware repeats the whole start-up in §7,
+  including the Si3210 and Si3050 resets.
+- **A record without slots makes that restart start the recovery
+  program** (Simulated). With the slot-less record above, the selector
+  finds no slot, scans, and the type 1 section (section B, the recovery
+  program) wins the scan. After the restart the unit did DHCP and ARP
+  but refused port 80 and sent no SIP. With a record holding slots for B
+  at 0x20000 and A (as an installed unit has; built from the format spec
+  §5), the restart came back to the application. So stock firmware run
+  from a flash with blank boot sectors works until its first
+  configuration change and then drops into recovery.
+- **The LINE port goes off hook at each start** (Simulated): for about
+  150 ms at 1.39 s, as the Si3050 line check (§8). On a real line that is
+  a brief seizure.
 - The firmware's fatal-error path masks interrupts, writes 0xFE to
   system-control reg 3 and spins: a fatal error looks like a hang
   followed by a watchdog reset (Observed).
@@ -344,4 +510,6 @@ mode (Hypothesis), and new firmware needs its own G.711 coder.
 | P2 | What 0x20004028 does | Board experiments once our code runs |
 | P3 | Real timing of the DMA columns, the 0x8200 engine and the counters at 0x2000E014 and 0x2000F0A8 | Board, logic analyser |
 | P4 | Which system-control bits are which PLL strap, and what the other board modes change | Board, or a reading taken in reset |
-| P5 | The Si3050's register traffic (not modelled) | Board, logic analyser on the SPI lines |
+| P5 | The Si3050's wiring and set-up as given in §8 (shared data and clock, SDI and SDO tied, 8-bit framing), all from the firmware's traffic | Board, logic analyser on the SPI lines and CS# pins during start-up |
+| P6 | The PCM highway: frame layout, slots and which DMA buffer words carry which port's samples; how to drive the 0x8200 DSP, or whether the DMA columns work without it | Board, logic analyser or scope on the Si3210's DRX and DTX with the phone off hook (dial tone) |
+| P7 | Whether the ES3890F's own reset (watchdog or JP2) also resets the Si3210 and Si3050, or only the firmware's RESET# pulses do | Board: scope on Si3210 pin 7 and Si3050 pin 13 through a watchdog reset |
