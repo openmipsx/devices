@@ -512,32 +512,42 @@ carry to and from the codecs:
   the commonest first bytes are 0x40, 0x48, 0x50, 0x4F, 0x41 and 0x44.
 - **Public description** (Hypothesis; from public patents, read
   2026-11-01, see [`../common/processor-es3890.md`](../common/processor-es3890.md)
-  §1 for the lineage). The ES3890's cores descend from IIT/8x8's Vision
-  Processor, and the 8x8 patents US 6,121,998 (filed 1998) and US
-  5,379,351 (filed 1992) describe its DSP from the host side: a RISC
-  core drives it by writing command words to a command queue with a
-  fill-level status word, an "init" housekeeping command that is a soft
-  reset, and I/O commands that stream blocks between system memory and
-  the DSP's own data memories; the DSP's program lives in a local SRAM
-  (plus, in those parts, a ROM of common routines) and a program too
-  big to fit is kept in DRAM and paged into the SRAM in pieces while it
-  runs, and the DSP runs the G.711, G.723 and G.729 audio coders, echo
-  cancellation and DTMF detection. That is the shape of the loading and
-  block-move protocol above. The 1992 patent's 16-bit command word is
-  therefore the first candidate for the 0x8214 word: bit 15 is a wait
-  bit (hold the command until the datapath is idle); bits 14 to 11 are
-  the type, 0001 a datapath subroutine call with a 12-bit entry address
-  in bits 11 to 0, 1000 and 1001 I/O writes to the two data memories
-  (DPCM and DP) with an 11-bit start address, 1010 and 1011 the matching
-  I/O reads, and 0000 housekeeping, of which init is the soft reset. Read
-  that way, the 0x40xx/0x50xx and 0x48xx/0x58xx block-move pairs are the
-  write and read commands for the two memories, the program-load
-  command 0x0800 is type 0001, and the 0x822C level and 0x8224 ready bit
-  are the queue-fill and I/O-ready status; the 0x18xx and 0x19xx run
-  commands would be type 0011, which the 1992 table does not define. The
-  1992 part's program word is 64 bits, read 32 bits at a time, which the
-  512 words of 32 bits here could carry as 256 pairs. None of this has
-  been tested against the 27 programs or on a board.
+  §1 for the lineage, and from a dirty-side statistical test of the 1992
+  format against the 27 programs, counts only). The ES3890's cores
+  descend from IIT/8x8's Vision Processor, and the 8x8 patents US
+  6,121,998 (filed 1998) and US 5,379,351 (filed 1992) describe its DSP
+  from the host side: a RISC core drives it by writing command words to
+  a command queue with a fill-level status, an "init" housekeeping
+  command that is a soft reset, and I/O commands that stream blocks
+  between system memory and the DSP's data memory; the program lives in
+  a local SRAM beside an on-chip ROM of common routines, a program too
+  big for the SRAM is kept in DRAM and paged in while it runs, and the
+  DSP runs the G.711, G.723 and G.729 coders, echo cancellation and DTMF
+  detection. That is the shape of the loading and block-move protocol
+  above, and the 1992 command word fits the 0x8214 word once its type is
+  read as the three bits 14 to 12 and its address as the twelve bits 11
+  to 0: bit 15 is a wait bit (hold the command until the datapath is
+  idle; clear on every run command seen); type 001 is a datapath
+  subroutine call, and every 0x18xx/0x19xx run command's entry 0x800|A
+  falls inside the resident 512-word program if that program sits at
+  address 0x800, while the init commands 0x1005 and 0x1052 call entries
+  below 0x800, consistent with the ROM of common routines; types 100
+  and 101 are I/O write and read with a 12-bit DSP data address, so
+  0x40xx and 0x48xx (and 0x50xx and 0x58xx) address one data memory with
+  bit 11 set or clear, not two memories; type 000 is housekeeping, which
+  covers the loader's 0x0800, 0x0100, 0x0106 and 0x0200, sub-commands
+  unknown. The 1992 part's 64-bit microcode word is ruled out for the
+  ES3890: 11 of the 27 programs have an odd word count and 4 of the 10
+  run entries are odd, so the program is a stream of 32-bit words. The
+  top three bits of each program word behave like the 1992 sequencer
+  field (010 "next" on about 81% of instruction words; 000 ends 18 of
+  the 27 programs and most host-run routines, 001 ends 8), but the jump
+  codes do not pair with target loads as the 1992 design needs, so only
+  "000 = done, 001 = return" is supported. The status registers differ
+  from the 1992 part: 0x822C & 0x3F is a 6-bit fill count (the loader
+  waits for at most 0x3C), not a 2-bit encoding, and 0x8224 bit 0 is a
+  ready bit, so the queue is deeper. None of this has been tested on a
+  board.
 - **Data moves**. Commands 0x40xx (RAM to DSP data memory at offset xx)
   and 0x50xx (DSP to RAM), and also 0x48xx and 0x58xx, carry sample
   buffers (80 and 160 words), 40-word blocks and 1 to 3 word parameters.
