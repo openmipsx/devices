@@ -41,7 +41,7 @@ add up exactly to the file length.
 |---|---|---|---|---|
 | 0x00 | 16 | ASCII `SpA3000 FiRmWaRe` (no terminator) | Magic | Observed |
 | 0x10 | 32 | zero | Reserved | Observed |
-| 0x30 | 16 | MD5 digest | MD5 over file bytes 0x000–0x1FF, computed with this 16-byte field set to zero | **Verified** |
+| 0x30 | 16 | MD5 digest | MD5 over the first 0x50 + 0x54 × 0x7C bytes of the file (0x200 for the stock three-section image), computed with bytes 0x10–0x3F set to zero | **Verified** for the stock image; the range rule Observed (both installers) |
 | 0x40 | 16 | zero | Reserved | Observed |
 | 0x50 | 4 | 0x00000080 | Header size. The installers use it: the section data starts at 0x50 + 0x54 × 0x7C, and the global MD5 covers that many bytes (below). | **Observed** (both installers) |
 | 0x54 | 4 | 0x00000080 | Table entry size, used in the same arithmetic | **Observed** |
@@ -51,8 +51,7 @@ add up exactly to the file length.
 
 The global MD5 covers the first 0x50 + 0x54 × 0x7C bytes of the file (the
 header and the counted table entries; 0x200 in a three-section image),
-computed with bytes 0x10–0x3F set to zero (Observed; the earlier wording
-"0x000–0x1FF with the digest zeroed" is the same thing for this image).
+computed with bytes 0x10–0x3F set to zero (Observed).
 The section data is protected by the per-section MD5 below. The first
 section's entry copy must sit at that same offset: the installers walk
 the sections from there, each entry copy followed by its data (entry
@@ -660,7 +659,8 @@ To produce an image the device might accept, a writer would:
    field 0x04 (the type's tag), then the 16-bit byte sum at 0x7E, with
    bytes 0x7C–0x7D zero.
 3. Write the global header and table, set the file length at 0x58,
-   compute the MD5 over 0x000–0x1FF with the MD5 field zeroed, and store
+   compute the MD5 over the first 0x50 + 0x54 × 0x7C bytes (0x200 with
+   three sections) with bytes 0x10–0x3F zeroed, and store
    it at 0x30.
 4. Write each section as its entry copy followed by its data, starting at
    0x50 + 0x54 × 0x7C (0x200 with three sections, 0x100 with one). Do not
