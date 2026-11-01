@@ -33,9 +33,11 @@ the opposite of the manual's convention.
 - The application calls functions through base registers r23 and r24,
   set by the image loader from the load directory. **Verified** (§6).
 - This document covers the MIPS-X core only. The chip also has a DSP
-  coprocessor, reached through on-chip registers at 0x20008200, whose
-  program the application does not seem to load (probably on-chip ROM)
-  and whose instruction set is unknown. **Hypothesis**; see
+  coprocessor, reached through on-chip registers at 0x20008200. It runs
+  programs the application supplies from its image's data-table stream (27
+  of them, 512 words of 32 bits at most; not on-chip ROM), whose
+  instruction set is unknown. **Observed** (loading), **Hypothesis**
+  (instruction format); see
   [`../spa3000/peripherals.md`](../spa3000/peripherals.md) §8.
 
 ## 2. Instruction formats

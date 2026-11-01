@@ -46,6 +46,9 @@ Only what the firmware's use makes reasonably clear. Offsets are from
 
 | Offset | Use | Status |
 |---|---|---|
+| 0x3800–0x39FC | 128 words written once at start-up: entries 0, 1, 2 = 0x03F07F00, 0x03700202, 0x07F00200, the rest 0x03F07F00. With the Si3210 on PCM slots 0 (receive) and 2 (transmit), read as the **TDM highway's 128-slot map**, slot 1 being the Si3050 | Observed values; role Hypothesis |
+| 0x3A00–0x3A7C | 32 words written with it: ten control words, then a 26-entry reciprocal table (32768 / (1 + k/32) for k = 0 to 25), then zeros | Observed; role unknown |
+| 0x3B80–0x3B90 | Control of the two blocks above: 0x3B90 pulsed 0xF then 0 twice; 0x3B84 stepped through 1, 0x11, 1, 5, 1, 3, 1, 2, 0, 8; 0x3B88 = 0x10; 0x3B80 = 0, then 0x81 last | Observed |
 | 0x4000, 0x4004 | Timer or clock set-up. Reset code writes 0x4000 = 1, 0x4004 = 0x1BDF3E | Observed values; role Hypothesis |
 | 0x4008 | Written 0xFF at start-up | Observed |
 | 0x400C | Timer count (§4) | Observed; Hypothesis, strong |
@@ -58,13 +61,15 @@ Only what the firmware's use makes reasonably clear. Offsets are from
 | 0x4038 | Interrupt status (§4) | Observed |
 | 0x6000–0x610C | Cleared at start-up (§7) | Observed |
 | 0x8000, 0x8100, 0x8104 | Clock or bus timing; reset code writes 0x8100 = 0x384, 0x8104 = 0x92 | Observed values; role Hypothesis |
+| 0x8000 | Also the DSP's **run control** (§8, "Program loading"): 0 then 1 at DSP init, 3 while a program is being loaded, 1 to run | Observed; role Hypothesis, strong |
 | 0x8200–0x822C | The port of an on-chip **DSP coprocessor** (§8, "Audio path"): command words to 0x8214, then a wait for 0x8224 bit 0; 0x822C is a FIFO level (`& 0x3F`) | Observed; role Hypothesis |
 | 0x8400–0x86FF | DMA columns at stride 0x100: each column offset (+0x28, +0x30, +0x38) holds count, address low and address high in the 0x84, 0x85 and 0x86 pages. Writing address high starts the column. The count is a negated length. Address high holds bits 31–11 of the RAM address; address low holds bits 10–2 as a word offset in its bits 8–0 (the d2a column also sets bit 11 there, meaning unknown) | Observed; start on address-high write Simulated; address split Hypothesis, strong (read this way, the DMA columns and the DSP's block moves, §8, name the same buffers) |
 | 0x87C0 | DMA column busy bits: bit 10 for column +0x28, bit 12 for column +0x30 (§8) | Observed use; meaning Hypothesis, strong |
 | 0x87CC | DMA column interrupt enables (same bit positions) | Observed |
 | 0x87D0–0x87EC | Engine control; 0x87E0 gets 0x6E23 then 0x6E21 (a pulse on bit 1) | Observed values; role unknown |
 | 0x87F4 | Write 1s to stop DMA columns | Observed; Hypothesis, strong |
-| 0xD008–0xD018, 0xF008–0xF0D0 | Set up once at start-up (§7); roles unknown | Observed |
+| 0xD008–0xD018 | Set up once at start-up (§7); roles unknown | Observed |
+| 0xF008–0xF088, 0xF0C0, 0xF0C4 | Written once at start-up: 0xF008 = 0xDE0, 0xF00C = 0xFF0, 0xF028 = 0x3DF80, 0xF02C = 0x3FFC0, 0xF044 = 0x1FE0, 0xF080 = 0x33C0, 0xF084 = 0x37D0, 0xF088 = 0x7FE0; 0xF0C0 = 0xFC then 0; 0xF0C4 = 0x3FF then 0x200. Four of the values are addresses inside ordinary application code and data (not entry points), and the sizes involved are 0x2000 − 0x20 and 0x8000 − 0x20. Look like base and limit pairs of some unit; **not** a second core's program windows. | Observed; role unknown |
 
 ## 3. System-control register file (0x14000003)
 
@@ -332,6 +337,27 @@ the stock firmware does, not requirements:
   with such a host (Hypothesis).
 - The web server was answering on port 80 by 1.7 s, the first time it
   was asked.
+- **An inbound call to the FXS port** (Simulated: a SIP peer on the TAP,
+  the firmware registered on line 1, an off-hook phone modelled on the
+  Si3210; vendor behaviour, not a requirement). An INVITE offering PCMU
+  and telephone-event to the registered contact was answered 100 Trying
+  and 180 Ringing at about 8.03 s simulated, without an authentication
+  challenge, and the Si3210 linefeed entered ringing in the same tick
+  (about 8 s after the INVITE was sent, as the peer's clock and the
+  board's run at different speeds). With the phone taken off hook 1 s
+  into ringing, the firmware saw ring trip, set the linefeed to forward
+  active and saw loop closure within about 45 ms, and sent 200 OK from
+  its DHCP lease address 59 ms after the hook. The answer chose PCMU,
+  advertised a packetisation time of 30 ms and offered the
+  telephone-event and a vendor named-signal-event payload. RTP then went both
+  ways at 20 ms and 160 bytes per packet from the board's lease address
+  (contiguous sequence numbers, one SSRC, marker never set), regardless of
+  the advertised 30 ms; the board's payload was mu-law zero (silent)
+  because the samples come from the DSP, which is not modelled. 140
+  packets went out in the 2.8 s of simulated speech, all received.
+  Packets to the board were received by the Ethernet chip; what the
+  firmware did with them is not visible. A BYE from the peer was answered
+  200 OK within about 60 ms; the board did not hang up on its own.
 
 **Si3210 and Si3050 control bus** (Observed; Simulated). Bit-banged on
 0x20004030: bits 1, 2 and 3 are data, Si3210 chip select (active low) and
@@ -435,8 +461,8 @@ carry to and from the codecs:
 
 | Offset | Role |
 |---|---|
-| 0x8214 | Command word. High byte classes seen: 0x40, 0x41, 0x48, 0x50, 0x51 and 0x58 are **block moves** between RAM and the DSP's own memory, with an offset in that memory in the low byte; 0x18 and 0x19 look like "run" commands; 0x01, 0x02, 0x08 and 0x10 are also used, roles unknown |
-| 0x8200 | Block-move length, written as a negated count (for example −40 or −160) |
+| 0x8214 | Command word. High byte classes seen: 0x40, 0x41, 0x48, 0x50, 0x51 and 0x58 are **block moves** between RAM and the DSP's own memory, with an offset in that memory in the low byte; 0x18 and 0x19 look like "run" commands; 0x08 is the **program load** class (class 0x08 loads program memory, while 0x40/0x50 moves address data memory); the pair 0x0100 then 0x0800 opens a program load and 0x0106 then 0x0200 closes it (see "Program loading" below); 0x01, 0x02 and 0x10 are also used, roles unknown |
+| 0x8200 | Block-move length, written as a negated count (for example −40 or −160); for a program load, 0xFE00 \| (512 − words) |
 | 0x8208, 0x820C | RAM address of a block move, split as for the DMA columns' address low and high (§2) |
 | 0x8204, 0x8218 | Written often; roles unknown |
 | 0x8224 | Ready: bit 0, polled after commands |
@@ -450,20 +476,56 @@ carry to and from the codecs:
   four buffers of 80 words, one word per 8 kHz frame for 10 ms
   (Hypothesis: the count unit is a 32-bit word; 672 does not divide
   evenly into 80 frames, so d2a's layout is not known).
-- **Its program is not loaded through this port**: at start-up the
-  firmware writes only five command words before the first ready wait
-  (§7.4, 0.106 s). So the DSP probably runs from on-chip ROM (Hypothesis).
-  How to load another program into it, if that is possible at all, is
-  not known.
+- **Program loading** (Observed in code; the loads Simulated). The DSP
+  runs code supplied by the firmware, not from on-chip ROM. Its program
+  memory is 512 words of 32 bits (Hypothesis, strong: the load length
+  field allows at most 512 words and no program is longer). The
+  application image holds **27 programs** at the start of its data-table
+  stream (wherever the image loader places it; program sizes run from 58 to
+  512 words, 40,452 bytes in all, in two contiguous banks: ids 1 to 0x11
+  at stream offsets 0x0000 to 0x5918 in id order, then ids 0x13, 0x12 and
+  0x14 to 0x1B at offsets 0xB9CC to 0xFEB8). One program is resident at a
+  time; the firmware swaps programs by id and keeps the resident id in
+  RAM. A load is: wait for the FIFO level (0x822C & 0x3F) to be at most
+  0x3C and for 0x8224 bit 0; write 3 to the run control (0x20008000);
+  command words 0x0100 then 0x0800 to 0x8214; 0x8200 = 0xFE00 \|
+  (512 − words); 0x8208 = bits 10 to 2 of the program's RAM address as a
+  word offset in bits 8 to 0, with bit 14 set; 0x820C = the RAM address
+  >> 11 (the 0x12000000 alias, so bits 31 to 11 of 0x12xxxxxx); wait
+  again; write 1 to the run control; command words 0x0106 then 0x0200.
+  The source is the loaded image data itself (no copy, no relocation).
+  So the run control is 0 and then 1 at init, 3 while a program is being
+  loaded, and 1 to run.
+- **Which programs run** (loads Simulated; selection Hypothesis). The
+  first load is program 0x12 (512 words) at about 0.39 s, after the DSP
+  init of §7.4 (run control 0 then 1; commands 0x106, 0x200, 0x1005,
+  0x1052; ready wait). The periodic block moves and run commands begin
+  only after it. From about 5 s, every 10 ms tick loads 0x12 and runs it,
+  then loads 0x1B (96 words) and runs that, so two programs time-share
+  the DSP. Ids 1 to 0x11 appear to be selected by the codec set-up code
+  (the codec name table follows the program table in the image), and ids
+  0x12 to 0x1B by the tone, caller-ID and FXO code (Hypothesis).
+- **Instruction format** (Hypothesis, from statistics over all 10,113
+  program words). Fixed 32-bit words; a word with bit 14 set carries one
+  following operand word (2,542 of 7,571 instructions); the top nibble
+  of an instruction is 4 in about two thirds of cases and 5 in a tenth;
+  the commonest first bytes are 0x40, 0x48, 0x50, 0x4F, 0x41 and 0x44.
+- **Data moves**. Commands 0x40xx (RAM to DSP data memory at offset xx)
+  and 0x50xx (DSP to RAM), and also 0x48xx and 0x58xx, carry sample
+  buffers (80 and 160 words), 40-word blocks and 1 to 3 word parameters.
+  In 14.8 s the only block taken from the image is 20 words of
+  constants, moved to data offset 0 once a tick. Program and data
+  memories are separate.
 - **Consequence**: with the DSP's registers answering "ready" and "FIFO
   empty" and no data moving, the d2a buffers stay all zero after the
   phone goes off hook, and no tone appears anywhere in RAM. So tones
   (dial tone at least) are presumably generated in the DSP. The audio path cannot be
-  simulated without a model of the DSP, which would need its instruction
-  set and ROM, neither of which is available. A capture of the PCM
+  simulated without a model of the DSP, which needs its instruction
+  set; the programs are in the image (above), but the instruction set is
+  not known. A capture of the PCM
   highway on the board (P6) is the way to learn the frame layout.
-  New firmware has two choices: drive the DSP as the stock firmware does,
-  once its commands are understood, or bypass it and fill the DMA
+  New firmware has two choices: drive the DSP as the stock firmware does
+  (the loading protocol above is understood; what the programs do is not), or bypass it and fill the DMA
   buffers from the MIPS-X core (whether the columns work without the DSP
   is not known).
 
@@ -511,5 +573,6 @@ carry to and from the codecs:
 | P3 | Real timing of the DMA columns, the 0x8200 engine and the counters at 0x2000E014 and 0x2000F0A8 | Board, logic analyser |
 | P4 | Which system-control bits are which PLL strap, and what the other board modes change | Board, or a reading taken in reset |
 | P5 | The Si3050's wiring and set-up as given in §8 (shared data and clock, SDI and SDO tied, 8-bit framing), all from the firmware's traffic | Board, logic analyser on the SPI lines and CS# pins during start-up |
-| P6 | The PCM highway: frame layout, slots and which DMA buffer words carry which port's samples; how to drive the 0x8200 DSP, or whether the DMA columns work without it | Board, logic analyser or scope on the Si3210's DRX and DTX with the phone off hook (dial tone) |
+| P6 | The PCM highway: frame layout, slots and which DMA buffer words carry which port's samples; whether the DMA columns work without the 0x8200 DSP (how to load and run it is answered in §8) | Board, logic analyser or scope on the Si3210's DRX and DTX with the phone off hook (dial tone) |
 | P7 | Whether the ES3890F's own reset (watchdog or JP2) also resets the Si3210 and Si3050, or only the firmware's RESET# pulses do | Board: scope on Si3210 pin 7 and Si3050 pin 13 through a watchdog reset |
+| P8 | The DSP's instruction set. A board capture cannot answer it; only decoding the program words in the image or a vendor document can | Decode the 27 programs (§8) against a vendor document, if one is found |

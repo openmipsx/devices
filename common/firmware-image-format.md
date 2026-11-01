@@ -836,9 +836,11 @@ Section C has been decompiled (its boot selector, §5) and its loader stub
 disassembled (§4.5, §4.6); section A has been decompiled in full. The
 chip's second core has not been examined. Running the application on a board model
 shows an on-chip DSP behind registers 0x20008200–0x2000822C that makes
-the audio samples; it is probably that second core, or part of it, and
-the application does not seem to load a program into it (Hypothesis;
-[`peripherals.md`](../spa3000/peripherals.md) §8, "Audio path").
+the audio samples; it is probably that second core, or part of it.
+The application loads its programs into it from the start of the
+data-table stream (27 programs of 58 to 512 words; Observed in code),
+not from on-chip ROM; their instruction set is unknown
+([`peripherals.md`](../spa3000/peripherals.md) §8, "Audio path").
 
 Toolchain: no mainstream compiler or assembler supports MIPS-X (none in
 GNU binutils, GCC or LLVM as of 2026-10). Ghidra has no stock support
