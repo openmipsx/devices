@@ -442,6 +442,17 @@ in [`../spa3000/peripherals.md`](../spa3000/peripherals.md).
   RAM, but not for an I/O register with side effects.
 - The handler returns with `jpcrs`, so the PSW saved at entry is
   restored; how the hardware saves it on entry is not known.
+- **No interrupt in a delay slot** (Hypothesis, strong). The three PCs
+  on the chain are consecutive instructions between control transfers.
+  In particular an interrupt still pending when the handler returns is
+  not taken until the `jpcrs`, `jpc`, `jpc` sequence has completed: the
+  return sequence restores the mask with the first instruction and would
+  otherwise be interrupted with its own two `jpc` on the chain, which
+  the handler's save and restart cannot survive. Simulated: a model that
+  took such an interrupt lost a task wakeup in the stock application
+  (deadlock, all tasks waiting on one lock) when two interrupt sources
+  fired close together; one that waits for the delay slots runs it
+  through.
 - Not known: whether exceptions (other than `trap`) share the vector,
   what the hardware does with the PSW on entry, and how many cycles entry
   takes. The 8x8 patent (§3, "Alignment exception") says its alignment
