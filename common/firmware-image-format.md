@@ -43,14 +43,25 @@ add up exactly to the file length.
 | 0x10 | 32 | zero | Reserved | Observed |
 | 0x30 | 16 | MD5 digest | MD5 over file bytes 0x000–0x1FF, computed with this 16-byte field set to zero | **Verified** |
 | 0x40 | 16 | zero | Reserved | Observed |
-| 0x50 | 4 | 0x00000080 | Probably the global header size | Hypothesis |
-| 0x54 | 4 | 0x00000080 | Probably the table entry size | Hypothesis |
+| 0x50 | 4 | 0x00000080 | Header size. The installers use it: the section data starts at 0x50 + 0x54 × 0x7C, and the global MD5 covers that many bytes (below). | **Observed** (both installers) |
+| 0x54 | 4 | 0x00000080 | Table entry size, used in the same arithmetic | **Observed** |
 | 0x58 | 4 | 0x000BD4D0 | Total file length in bytes | **Verified** (equals file size) |
 | 0x5C | 32 | `3.1.20(GW)`, NUL-padded | Image version string | Observed |
-| 0x7C | 4 | 0x00000003 | Number of sections | Hypothesis (matches the table) |
+| 0x7C | 4 | 0x00000003 | Number of sections: the number of table entries read and of entry copies walked by the installers. Entries after the count are never read. | **Observed** |
 
-The global MD5 covers the header and the whole section table, but not the
-section data. The section data is protected by the per-section MD5 below.
+The global MD5 covers the first 0x50 + 0x54 × 0x7C bytes of the file (the
+header and the counted table entries; 0x200 in a three-section image),
+computed with bytes 0x10–0x3F set to zero (Observed; the earlier wording
+"0x000–0x1FF with the digest zeroed" is the same thing for this image).
+The section data is protected by the per-section MD5 below. The first
+section's entry copy must sit at that same offset: the installers walk
+the sections from there, each entry copy followed by its data (entry
+field 0x0C, then field 0x20 bytes), and read the table only for the type
+bytes. An image with fewer sections therefore starts them earlier: at
+0x100 for one section. Simulated: a one-section image laid out at 0x200
+with a 0x200-byte MD5 was fetched and refused as corrupt by both
+installers; the same bytes at 0x100 with a 0x100-byte MD5 were accepted
+and written by both. The boot selector reads none of these fields.
 
 ## 3. Section table entry (0x80 bytes)
 
@@ -125,7 +136,9 @@ After the chunk list come the stream records. Each record is found by its
 offset in the load directory and is laid out as:
 
 ```
-u8   pre[8]        meaning unknown (see Q3)
+u32  alt_flag       if non-zero, the decompression service writes the
+u32  alt_dest       stream to alt_dest instead of the directory's load
+                   address (Observed in the service; see Q3)
 ...  raw deflate stream (RFC 1951, no zlib or gzip header)
 u32  CRC-32 of the uncompressed data   (LITTLE-endian; the standard
                                         CRC-32 used by zlib and gzip)
@@ -134,7 +147,10 @@ u32  uncompressed length               (LITTLE-endian)
 ```
 
 Verified for all eight streams: each decompresses cleanly and its CRC-32
-and length match. The trailer is the same as a gzip member trailer.
+and length match. The trailer is the same as a gzip member trailer. In
+the stock images alt_flag is zero for every stream but one in section B,
+whose alt_dest equals its load address. A generator should write two
+zero words.
 
 ### 4.4 Load directory
 
@@ -143,11 +159,11 @@ The directory sits at the offset given in header field 0x04 and holds
 
 | Type | Word 1 | Word 2 | Word 3 | Word 4 | Meaning | Status |
 |---|---|---|---|---|---|---|
-| 0x10 | Offset of the stream record (§4.3) | Load address | Unknown (see Q4) | 1 | Decompress stream to load address | **Verified** (offsets point to streams; load addresses tile memory without overlap, see §5) |
-| 0x02 | Address | Length | Varies | 0 | Zero-fill (BSS). Each region starts exactly where a loaded stream ends. | Hypothesis, strongly supported |
+| 0x10 | Offset of the stream record (§4.3) | Load address | Not used: the loader passes only words 1 and 2 to the decompression service (Observed), which inflates correctly without it (Simulated). Meaning unknown. | 1 | Decompress stream to load address | **Verified** (offsets point to streams; load addresses tile memory without overlap, see §5) |
+| 0x02 | Address | Length in **words** | Varies | 0 | Zero-fill (BSS). Each region starts exactly where a loaded stream ends. The loader clears word 2 words (Observed), as §5 found for section C's program. | Observed |
 | 0x07 | Word address: 0x00016D34 (A), 0x00014000 (B) | Varies | Varies | 0 | Initial value of register r23, the code base register used for calls and far jumps. It equals the word address of the first code stream plus 0x10000. **Not the entry point.** | **Verified** for A; B fits the same rule (Observed) |
 | 0x05 | Word address: 0x0004BC00 (A only) | Varies | Varies | 0 | Initial value of r24, a second code base register. It equals the word address of the second code stream (byte 0xEF000) plus 0x10000. | **Verified** |
-| 0x06 | 0x00010000 (A only) | Varies | Varies | 0 | Probably the initial value of r25 | Hypothesis |
+| 0x06 | 0x00010000 (A only) | Varies | Varies | 0 | Initial value of r25 (the loader sets r25 from it; Observed) | Observed |
 | 0x03 | 0x400070A6 (A), 0x4000CB6A (B) | Varies | Varies | 0 | Entry point; always the last record. Bits 29–0 are a **word** address (A: 0x70A6, byte 0x1C298; B: 0xCB6A, byte 0x32DA8). Bit 30 does not change where execution starts, because jump targets are taken modulo 2³⁰ words (Simulated; [`processor-es3890.md`](processor-es3890.md) §6). Whether anything else reads it is unknown. | A: **Observed** (the address follows a return and, in the first instructions, sets the stack pointer from memory before jumping into the application). B: Hypothesis, by the same rule. |
 
 Code addresses in the directory and in the processor are word addresses
@@ -159,8 +175,20 @@ application.
 
 "Varies" means the word does not look meaningful: its value changes
 irregularly and seems to be leftover buffer contents from the vendor's
-build tool. Hypothesis: the loader ignores these words. When generating an
-image, set them to zero, but test this first (see Q5).
+build tool. The loader reads these words and does not use them
+(Observed), and the stock application starts and runs normally with all
+of them set to zero in flash (Simulated). Set them to zero. Words 2 and
+3 matter only in the 0x01 record (destination, word count) and word 2
+in the 0x02 record (word count).
+
+Word 4 holds three relocation nibbles, not a flag: bits 0–3 apply to
+word 1, bits 4–7 to word 2 and bits 8–11 to word 3. A nibble of 1 adds
+the address of the section's packed header to that word; 0 leaves it
+absolute (Observed). That is why the 0x01 and 0x10 records carry 1 and
+the register records 0. Further record types the loader handles: 0x04
+calls word 1 as a subroutine (unused in the stock images); 0x08, 0x09,
+0x0A, 0x0B and 0x0C set r4, r5, r22, r29 and r19 from word 1. Unknown
+types are skipped (Observed).
 
 ### 4.5 Trailing area
 
@@ -212,6 +240,11 @@ C data offset 0x0380 when section C sits at the top of the flash window
 These entry values are enough. Called with just them from a minimal
 harness, the service decompresses all 8 type 0x10 streams of sections A
 and B of 3.1.20(GW) to output identical to zlib's (**Simulated**).
+The two stock loaders use different values: section A's copies the data
+block to 0x001C0000 and calls with r19 = 0x001C7FF0 and sp = 0x001EFFF0;
+section B's uses 0x00160000, 0x0016FFF0 and 0x001FFFF0 (Observed). The
+service works with either and with the values above, so only the
+relation matters: r25 is where the caller copied the data block.
 
 The loader keeps its own state in RAM at byte addresses 0x0C–0x33 across
 the call (it saves registers there), so the service must not use that
@@ -340,8 +373,9 @@ the unit, so that the boot selector chooses again (§5, Section C).
    version cannot be parsed, has major version 0, or is 1.0.x or 2.0.x.
    This refuses downgrades to old firmware generations; 2.1 and later
    are accepted.
-6. Check every section's table entry byte sum (0x7C) and data MD5
-   (0x10). Any failure rejects the whole image before anything is
+6. Check every section's entry byte sum (0x7C) and data MD5 (0x10),
+   walking the entry copies from offset 0x50 + 0x54 × 0x7C (§2). Any
+   failure rejects the whole image before anything is
    written. Section A uses the same code (Observed). The installers make
    none of the boot selector's other checks; see "What the installers do
    not check" in §6.
@@ -574,7 +608,7 @@ alternating 64 KB blocks:
 | Offset in block | Size | Content |
 |---|---|---|
 | 0x0000 | 0xA0 | Boot record (above) |
-| 0x0400 | 0x180 | Copy of the installed image's global header and section table (§2, §3) |
+| 0x0400 | 0x180 | The first *header size* (field 0x50) bytes of the installed image, that is its global header (0x80 bytes for the stock image), then 0xFF to the end of the area. The section table is not copied (Observed, both installers). |
 | 0x0800–0x0FFF | 32 × 0x40 | Event log, filled downwards from 0x0FC0. Each entry is a sequence number followed by a short text. Upgrades add entries naming the stage, the program doing the upgrade (application or recovery) and the new version. Section A also logs parameter-storage errors here. |
 | 0x1000–0x87FF | 0x7800 | Configuration store ([`flash.md`](../spa3000/flash.md) §4) |
 | 0x8800–0xFFFF | 0x7800 | Mirror of the configuration store. 0x1000–0xFFFF is copied across unchanged when only the record changes. |
@@ -629,7 +663,9 @@ To produce an image the device might accept, a writer would:
    compute the MD5 over 0x000–0x1FF with the MD5 field zeroed, and store
    it at 0x30.
 4. Write each section as its entry copy followed by its data, starting at
-   0x200.
+   0x50 + 0x54 × 0x7C (0x200 with three sections, 0x100 with one). Do not
+   pad the table to three entries unless the count says three: the
+   installers never read entries beyond the count.
 
 The bootloader checks each section's type, tag, entry byte sum, length
 and MD5 (§5, Section C). It does not check the global header MD5 in the
@@ -696,8 +732,14 @@ upgrader's behaviour:
 ### 7.1 Recovery protocol (section B)
 
 When section B is running (§5), it accepts upgrades over a UDP protocol
-of its own. Observed from decompilation. The field layout is partly
-traced; confirm on the wire.
+of its own. Observed from decompilation and confirmed on the wire
+against the recovery program on the board model (Simulated): the
+160-byte type 0 and type 2 requests, the 100-byte type 1 and type 2
+replies to the group at port 4811, the TFTP port at 0x1C and the file
+name at 0x20, and the read request sent from the unit's port 4810 to
+234.4.8.10 at that port. The unit sends its TFTP acknowledgements to the
+port it sent the read request to, so a server must answer from that
+socket rather than from a fresh port.
 
 - It listens on **UDP port 4810**, joined to multicast group
   **234.4.8.10**. Replies use port 4811. Whether they go to the multicast
@@ -855,13 +897,14 @@ are being built from the instruction set manual in openmipsx's
 | # | Question | Why it matters |
 |---|---|---|
 | Q1 | ~~What is table entry field 0x04?~~ Answered: a fixed tag per section type, which the bootloader checks (§3). | — |
-| Q2 | Global header fields 0x50, 0x54 and 0x7C: confirm their meaning. | Needed to generate headers confidently. |
-| Q3 | Meaning of the 8 bytes before each deflate stream. Most are zero; some equal the stream's load address. | Generator correctness. |
-| Q4 | Directory type 0x10, word 3 (the other record types are resolved, see §4.4). Values (0x1472, 0xC46, 0xD1D0, 0xCAAB, 0x16EA, 0x35A8, 0x4EB8, 0x2B1) are not the 16-bit byte sum or either half of the CRC-32 of the uncompressed data. | Possibly a checksum the loader checks. |
-| Q5 | Does the loader ignore the "Varies" words in non-stream directory records? | Generator correctness. |
+| Q2 | ~~Global header fields 0x50, 0x54 and 0x7C: confirm their meaning.~~ Answered: header size, entry size and count, used by the installers for the MD5 range and the first section's offset (§2). | — |
+| Q3 | ~~Meaning of the 8 bytes before each deflate stream.~~ Answered: a flag and an alternative destination honoured by the decompression service (§4.3). | — |
+| Q4 | ~~Directory type 0x10, word 3.~~ Answered as far as it matters: the loader does not pass or check it and the service does not need it (§4.4). Its meaning is still unknown; values (0x1472, 0xC46, 0xD1D0, 0xCAAB, 0x16EA, 0x35A8, 0x4EB8, 0x2B1) are not the byte sum or either half of the CRC-32 of the uncompressed data. | — |
+| Q5 | ~~Does the loader ignore the "Varies" words in non-stream directory records?~~ Answered: yes (§4.4; Observed and Simulated). | — |
 | Q6 | Section C's embedded program is the boot selector: it checks and starts a type 2 or type 1 section from flash at 0x0C000000 (§5). The code at 0x0380 is the decompression service of §4.6. Sections A and B both write the boot records into flash sectors 0 and 1, with identical code; the +0x08 word is a sequence number increased on every write. Section A writes type 0 sections at flash 0xF2000, which confirms section C's placement. What section B does when started is in §5. All of these are answered. Still open: what runs before the boot selector; whether flash really repeats through the window (the boot selector's 0x0CFF2400 against flash offset 0xF2400); and the meaning of the record's +0x10 and +0x14 halfwords (0x0400 and
 0x1000; Hypothesis: the offsets of the header copy and the configuration
 store). | Boot chain and recovery. |
 | Q7 | Mostly answered. Section B is a recovery image (§5, Section B). If the application fails its checks, the boot selector falls back to section B (from the decompilation, and **Simulated**: §5, Section C, Order). This needs section B intact at a 64 KB boundary the scan covers, or a valid type 1 slot in the boot record. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). Installing an image with no type 2 section, from either program, does clear the slot, and the unit then starts section B (§6, Simulated). An installed type 2 section that is empty or has a misaligned start stops the boot selector with no fallback (§6). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
 | Q8 | Is the format the same in other firmware versions? | Only 3.1.20(GW) has been examined. |
-| Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: is type 0x06 really r25? Bit 30 of the entry record is partly answered: the jump ignores it (§4.4), but whether anything else reads it is unknown. | Load map correctness; whether they are second-core code, data or something else. |
+| Q10 | **Install, then boot: unverified end to end.** On the board model both installers accepted a one-section image (§2) and wrote its section where §5 says (the application at a 64 KB boundary counting down from 0xF0000, section B packed to 4 bytes ending at 0xF0000), but what each did next was not what §5 and §7.2 describe: neither wrote a boot record or restarted, and both went on programming other sectors (section B after a sweep reading one byte every 64 KB through the whole address space, and over its own sector among others). Whether that is the firmware or a gap in the model's flash and bus behaviour is not decided, so neither "the unit then boots into the new section" nor "section B may erase itself when installing" is asserted. The boot selector does start the installed section from the flash the installers are described as leaving (Simulated, §5). | Whether an upgrade from stock firmware can be trusted, and whether section B is a safe recovery path. |
+| Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: ~~is type 0x06 really r25?~~ yes (§4.4). Bit 30 of the entry record is partly answered: the jump ignores it (§4.4), but whether anything else reads it is unknown. | Load map correctness; whether they are second-core code, data or something else. |
