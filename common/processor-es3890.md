@@ -453,6 +453,21 @@ in [`../spa3000/peripherals.md`](../spa3000/peripherals.md).
   (deadlock, all tasks waiting on one lock) when two interrupt sources
   fired close together; one that waits for the delay slots runs it
   through.
+- **The return sequence is protected by software** (Hypothesis, strong).
+  The last store in every handler, before `jpcrs`, writes 0 to the
+  interrupt-suppress register at 0x20004028
+  ([`peripherals.md`](../spa3000/peripherals.md) §4), which holds off
+  interrupts for the next 15 instructions. A public account of the
+  predecessor chip (IIT's Vision Controller) by one of its engineers
+  describes that register, the same handler tail and the reason: an
+  interrupt arriving during the `jpcrs`, `jpc`, `jpc` restart re-entered
+  the handler with a half-restarted chain, and the PSW's saved-state
+  bit and the chain could not recover. The same store precedes the
+  firmware's PSW read-modify-write. So the stock firmware never lets the
+  hardware take an interrupt in that window, and the delay-slot rule
+  above cannot be told apart from this register's effect by running the
+  stock code: a simulator that honours the register and takes interrupts
+  in delay slots would run it just as well.
 - Not known: whether exceptions (other than `trap`) share the vector,
   what the hardware does with the PSW on entry, and how many cycles entry
   takes. The 8x8 patent (§3, "Alignment exception") says its alignment

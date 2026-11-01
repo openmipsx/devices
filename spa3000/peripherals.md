@@ -54,7 +54,7 @@ Only what the firmware's use makes reasonably clear. Offsets are from
 | 0x400C | Timer count (§4) | Observed; Hypothesis, strong |
 | 0x4010 | Timer interrupt acknowledge (any write) | Observed |
 | 0x4024 | Acknowledge for interrupt bit 13 (the system-control block's interrupt), after that block's own status is cleared | Observed; Hypothesis, strong |
-| 0x4028 | Written 0, 6, 9 or 0xE before (and often after) nearly every GPIO and system-control access. Meaning unknown | Observed |
+| 0x4028 | **Interrupt suppress** (§4). Writing S (bits 3–0) holds off interrupts for the next 15 − S instructions: 0 = 15, 0xE = 1, 0xF = none. The firmware writes 0 before its PSW read-modify-write, before each two-step system-control access (§3), in the idle loop, in the context switch and as the last store of every interrupt handler before `jpcrs`; it writes 9 or 6 before each GPIO read-modify-write group and again before the next | Observed use; meaning Hypothesis, strong (the firmware's handler tail is the one a public description of the predecessor chip's register shows; see §4) |
 | 0x402C | GPIO port; only bit 2 ever changes, always as a low-then-high pulse: the **watchdog kick** (§5). Initial value 0x36 | Observed; Hypothesis, strong |
 | 0x4030 | GPIO port carrying the SLIC and DAA control bus (§8). Initial value 0x44 | Observed |
 | 0x4034 | Interrupt enable (§4) | Observed |
@@ -120,6 +120,26 @@ which strap is not known).
 
 The CPU side (vector at word 0, PSW mask bit, PC chain) is in
 [`processor-es3890.md`](../common/processor-es3890.md) §10.
+
+**Interrupt suppress, 0x20004028** (Hypothesis, strong). A 4-bit
+register: writing S suppresses interrupts for the next 15 − S
+instructions (0 gives 15, 0xE gives 1, 0xF none). The ES3890's
+predecessor, IIT's Vision Controller, had the same register in its
+RISC-interface block, with these semantics and the same handler tail,
+in a public account by one of its engineers (Hedley Rainnie, "Stanford
+Mips-X @IIT", hrrzi.com, 2017; its listing shows the register at 0x4014
+while its machine word encodes 0x4028, so which offset that chip used
+is unresolved; the ES3890 firmware uses 0x4028 everywhere and writes
+0x4014 once, with 0, at reset). On the SPA3000 the firmware writes 0
+before every sequence that must not be split: the PSW mask update that
+is its critical-section primitive, the address-then-data accesses to
+the system-control file (§3), the idle loop, the context switch and the
+return from every interrupt handler (`st 0x4028, r0`, two no-ops, then
+`jpcrs`, `jpc`, `jpc`). The GPIO drivers write 9 (6 instructions) or 6
+(9 instructions) before each read-modify-write-store on 0x402C or
+0x4030 and re-arm before the next group; the groups between re-arms are
+5 to 8 instructions. Any handler we write needs the same store before
+`jpcrs`; see `processor-es3890.md` §10 for why.
 
 **Timer** (Observed sequence; counting direction and rate Hypothesis,
 strong; Simulated). 0x2000400C counts **up by one per CPU cycle** and the
