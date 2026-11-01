@@ -5,7 +5,12 @@ clean side. Contains no vendor code. Same status marks as
 [`firmware-image-format.md`](firmware-image-format.md): **Verified**,
 **Observed**, **Simulated**, **Hypothesis**. Simulated facts come from
 running vendor code on the openmipsx simulator, with outputs checked
-against an independent oracle (see the clean-room log, 2026-10-29).
+against an independent oracle (see the clean-room log, 2026-10-29). A
+fifth mark, **Documented**, means a public document states the fact; the
+source is named with the mark. The only such source so far is a patent
+of the chip's design lineage (§1), so a Documented fact describes the
+design the patent records, and the Simulated or Observed evidence beside
+it is what shows the ES3890 kept it.
 
 The base reference is Paul Chow, *MIPS-X Instruction Set and Programmer's
 Manual*, Stanford CSL-86-289
@@ -27,9 +32,10 @@ the opposite of the manual's convention.
   ignored, so word addresses wrap modulo 2³⁰. **Simulated** (§6).
 - Two delay slots after every branch and jump. **Verified**.
 - The ES3890 reuses the manual's coprocessor and floating-point memory
-  opcodes as byte and halfword loads and stores. **Observed**, strongly
-  supported; the extension done by three of the four loads is
-  **Simulated** (§3).
+  opcodes as byte and halfword loads and stores. **Documented** (8x8
+  patent US 5,982,459, Appendix A: the same six opcodes with the same
+  widths and signedness); **Observed** in the code, and the extension done
+  by three of the four loads is **Simulated** (§3).
 - The application calls functions through base registers r23 and r24,
   set by the image loader from the load directory. **Verified** (§6).
 - This document covers the MIPS-X core only. The chip also has a DSP
@@ -39,6 +45,33 @@ the opposite of the manual's convention.
   instruction set is unknown. **Observed** (loading), **Hypothesis**
   (instruction format); see
   [`../spa3000/peripherals.md`](../spa3000/peripherals.md) §8.
+
+**Lineage** (public record; patents and the web sources named here, read
+on 2026-11-01, no firmware material involved). The ES3890 is not an ESS
+design from scratch. Its two cores descend from the Vision Processor of
+Integrated Information Technology (IIT, Santa Clara), designed in 1992 by
+a team including Jan Fandrianto and Chi-Shin Wang (IIT patents US
+5,379,351 and US 5,594,813; D. Bailey et al., "Programmable vision
+processor/controller…", *IEEE Micro* 12(5), 1992). IIT's next part, the
+VCP, paired that processor with a MIPS-X core carrying the byte and
+halfword extension of §3 (US 5,982,459, filed 1995; IIT became 8x8, Inc.
+in 1996, and 8x8's later patents US 6,121,998 and US 6,124,882 describe
+the same pair as RISC plus DSP). Wang and Fandrianto left to found
+VideoCore Technology in 1995; ESS bought VideoCore in January 1996
+(ESS corporate history at fundinguniverse.com) and sold the design as
+the VideoDrive line, of which the ES3880 and ES3890 are the "32-bit
+controller and 64-bit video processor" parts (ES3890 product brief).
+Fandrianto later founded Komodo Technology (the ATA-186, sold to Cisco)
+and, in 2003, Sipura Technology, whose SPA products run on the ES3890.
+The founder chain rests on a translated memoir (palmmicro.com, 2006) and
+on Wikipedia's 8x8 article, so it is second-hand; the patents and the
+acquisition are primary. Consequences for this document: the 8x8 patents
+are a public description of the design the ES3890's cores came from, and
+the DSP's control interface in
+[`../spa3000/peripherals.md`](../spa3000/peripherals.md) §8 has a public
+candidate description in the 1992 patents. Whether ESS changed either
+core after 1996 is not known, so each patent fact is marked
+**Documented** for the design and needs its own evidence for the chip.
 
 ## 2. Instruction formats
 
@@ -65,12 +98,26 @@ Src2 field is the destination for loads and the data source for stores.
 |---|---|---|---|
 | 000 | `ld` | Load word | Offsets always a multiple of 4 |
 | 010 | `st` | Store word | Offsets always a multiple of 4 |
-| 100 | `ldf` | Load byte, zero-extended | Any offset; result used as a register; sometimes followed by explicit sign extension |
-| 101 | `movfrc` | Load byte, sign-extended | Any offset; Src1 is a normal pointer register, not r0; in 20 images, almost never followed by sign extension and never by zero extension |
-| 001 | `ldt` | Load halfword, zero-extended | Offsets always even. Simulated: a loaded value ORed into the low half of a word without masking gives correct results only if zero-extended |
-| 111 | `movtoc` | Load halfword, sign-extended | Offsets always even; the register behaves as a destination. Simulated: signed comparisons of loaded samples give correct results only if sign-extended |
-| 011 | `stt` | Store byte (low 8 bits) | Any offset |
-| 110 | `stf` | Store halfword (low 16 bits) | Offsets always even |
+| 100 | `ldf` | Load byte, zero-extended | Documented (8x8 patent US 5,982,459, App. A: `lb`); Observed: any offset, result used as a register, sometimes followed by explicit sign extension |
+| 101 | `movfrc` | Load byte, sign-extended | Documented (US 5,982,459, App. A: `slb`); Observed: any offset, Src1 is a normal pointer register, not r0; in 20 images, almost never followed by sign extension and never by zero extension |
+| 001 | `ldt` | Load halfword, zero-extended | Documented (US 5,982,459, App. A: `ls`); Observed: offsets always even. Simulated: a loaded value ORed into the low half of a word without masking gives correct results only if zero-extended |
+| 111 | `movtoc` | Load halfword, sign-extended | Documented (US 5,982,459, App. A: `sls`); Observed: offsets always even, the register behaves as a destination. Simulated: signed comparisons of loaded samples give correct results only if sign-extended |
+| 011 | `stt` | Store byte (low 8 bits) | Documented (US 5,982,459, App. A: `sb`); Observed: any offset |
+| 110 | `stf` | Store halfword (low 16 bits) | Documented (US 5,982,459, App. A: `ss`); Observed: offsets always even |
+
+**Documented** (8x8 patent US 5,982,459, Appendix A; see §1 for the
+lineage). The patent adds six instructions to MIPS-X for 8-bit and
+16-bit data, all of type 10: load byte (OP 100, upper bits zero), store
+byte (011), load short (001, upper bits zero), store short (110), signed
+load byte (101, bit 7 copied upwards) and signed load short (111, bit 15
+copied upwards). Address = Reg(Src1) + SignExtend(Offset), as for `ld`,
+with the low two bits of the offset naming the byte within the word,
+byte 0 being the most significant (bits 31–24 of the data bus) and byte
+3 the least. That is the big-endian byte addressing of §1. The patent
+does not say which registers the opcodes displace, so the manual names in
+the table are this document's, and the patent's own mnemonics are `lb`,
+`sb`, `ls`, `ss`, `slb` and `sls`. The evidence below, gathered before
+the patent was found, confirms all six rows on the ES3890 itself.
 
 Load or store: **Observed** from dataflow (whether the register is
 defined just before or used just after). Sizes: **Observed** from offset
@@ -110,7 +157,23 @@ extract sequences (`rotlb`, `rotlcb`) never appear in the application,
 which fits the chip having real byte access.
 
 Suggested mnemonics, since the manual's names are misleading here:
-`ldbu`, `ldb`, `ldhu`, `ldh`, `stb`, `sth`.
+`ldbu`, `ldb`, `ldhu`, `ldh`, `stb`, `sth`. They map one to one onto the
+patent's `lb`, `slb`, `ls`, `sls`, `sb` and `ss`.
+
+**Alignment exception** (**Hypothesis**, untested on the ES3890; from
+US 5,982,459, Appendix A). The patent's processor adds an ALIGNMENT
+exception, raised by a halfword access that is not halfword-aligned or a
+word access that is not word-aligned, and handled like an ALU overflow:
+the processor traps to address 0 (the interrupt vector of §10). Four new
+PSW bits, PSW[27:24], control it: bit 26 (called L) masks the trap when
+set, bit 24 (A) is the flag the handler tests to tell an alignment trap
+from the others, and bits 27 and 25 (l and a) are the copies of L and A
+in the other PSW half that the hardware keeps for the interrupted
+context. A can be changed only in system mode. Nothing in the SPA3000
+firmware has been seen to read or write these bits, and no misaligned
+access has been simulated, so this is a hypothesis to test on a board:
+the reset value of PSW bit 26 decides whether a misaligned `ld` traps or
+returns something.
 
 ## 4. Branches (TY = 00)
 
@@ -381,4 +444,7 @@ in [`../spa3000/peripherals.md`](../spa3000/peripherals.md).
   restored; how the hardware saves it on entry is not known.
 - Not known: whether exceptions (other than `trap`) share the vector,
   what the hardware does with the PSW on entry, and how many cycles entry
-  takes.
+  takes. The 8x8 patent (§3, "Alignment exception") says its alignment
+  exception traps to address 0, which fits a single shared vector, and
+  describes PSW[27:24] as its control bits (**Hypothesis** for the
+  ES3890).

@@ -510,6 +510,34 @@ carry to and from the codecs:
   following operand word (2,542 of 7,571 instructions); the top nibble
   of an instruction is 4 in about two thirds of cases and 5 in a tenth;
   the commonest first bytes are 0x40, 0x48, 0x50, 0x4F, 0x41 and 0x44.
+- **Public description** (Hypothesis; from public patents, read
+  2026-11-01, see [`../common/processor-es3890.md`](../common/processor-es3890.md)
+  §1 for the lineage). The ES3890's cores descend from IIT/8x8's Vision
+  Processor, and the 8x8 patents US 6,121,998 (filed 1998) and US
+  5,379,351 (filed 1992) describe its DSP from the host side: a RISC
+  core drives it by writing command words to a command queue with a
+  fill-level status word, an "init" housekeeping command that is a soft
+  reset, and I/O commands that stream blocks between system memory and
+  the DSP's own data memories; the DSP's program lives in a local SRAM
+  (plus, in those parts, a ROM of common routines) and a program too
+  big to fit is kept in DRAM and paged into the SRAM in pieces while it
+  runs, and the DSP runs the G.711, G.723 and G.729 audio coders, echo
+  cancellation and DTMF detection. That is the shape of the loading and
+  block-move protocol above. The 1992 patent's 16-bit command word is
+  therefore the first candidate for the 0x8214 word: bit 15 is a wait
+  bit (hold the command until the datapath is idle); bits 14 to 11 are
+  the type, 0001 a datapath subroutine call with a 12-bit entry address
+  in bits 11 to 0, 1000 and 1001 I/O writes to the two data memories
+  (DPCM and DP) with an 11-bit start address, 1010 and 1011 the matching
+  I/O reads, and 0000 housekeeping, of which init is the soft reset. Read
+  that way, the 0x40xx/0x50xx and 0x48xx/0x58xx block-move pairs are the
+  write and read commands for the two memories, the program-load
+  command 0x0800 is type 0001, and the 0x822C level and 0x8224 ready bit
+  are the queue-fill and I/O-ready status; the 0x18xx and 0x19xx run
+  commands would be type 0011, which the 1992 table does not define. The
+  1992 part's program word is 64 bits, read 32 bits at a time, which the
+  512 words of 32 bits here could carry as 256 pairs. None of this has
+  been tested against the 27 programs or on a board.
 - **Data moves**. Commands 0x40xx (RAM to DSP data memory at offset xx)
   and 0x50xx (DSP to RAM), and also 0x48xx and 0x58xx, carry sample
   buffers (80 and 160 words), 40-word blocks and 1 to 3 word parameters.
