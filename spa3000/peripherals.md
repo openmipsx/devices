@@ -139,7 +139,13 @@ exact only then).
 - **Enable**: system-control reg 3 bit 7. The firmware writes 0xBC.
   Writing 0xFE there and then not kicking is how the firmware reboots
   itself: it masks interrupts and spins until the watchdog resets the
-  chip. Observed; Hypothesis, strong.
+  chip. Observed; Hypothesis, strong. Both installers write reg 3 with
+  bit 7 **clear** (0x3C, the start-up shadow value) before they erase
+  and program flash, and 0xBC again when the install is over or refused;
+  no kick happens in between (Observed in the code of A and B;
+  [`flash.md`](flash.md) §1). So the stock firmware treats bit 7 as an
+  on/off switch it can use at run time, and a stock install of the
+  application runs for several seconds with the watchdog off.
 - **Kick interval** (Simulated). Start-up kicks three times in its first
   11 µs, before the watchdog is enabled; enables it at about 33 µs and
   kicks twice at once; kicks once in the first timer tick. After that the

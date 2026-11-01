@@ -1,6 +1,7 @@
 # SPA3000 flash contents
 
-Status: draft, 2026-10-30. Dirty-side findings written as facts for the
+Status: draft, 2026-10-30, revised 2026-11-01 (driver retries, unlock
+addresses, watchdog during an install). Dirty-side findings written as facts for the
 clean side, from reading every part of the stock firmware that reads or
 writes the flash. Contains no vendor code. No real dump of this unit
 exists yet: the first dump is the test of everything here, above all the
@@ -18,21 +19,69 @@ what must survive our firmware, and how to check a dump.
 ## 1. Chip
 
 Am29LV081B, 1 MB, sixteen uniform 64 KB sectors (0x00000, 0x10000, …,
-0xF0000); autoselect ID manufacturer 0x01, device 0x38; AMD command set
-with unlock addresses 0x555/0x2AA (only A10–A0 are decoded, so the
-firmware's 0x5555/0x2AAA work too); sector erase confirm 0x30; byte
-program 0xA0; status by DQ7 polling with DQ5 as the timeout flag. There
-is no software sector protection on this part: protection needs high
-voltage on A9 or RESET#. (Datasheet; the firmware uses exactly these
-commands, Observed.)
+0xF0000); autoselect ID manufacturer 0x01, device 0x38; AMD command set;
+sector erase confirm 0x30; byte program 0xA0; status by DQ7 polling with
+DQ5 as the timeout flag. **The address of every unlock and command write
+cycle is a don't-care on this part** (Datasheet Rev D, Table 4: `XXX`
+for every cycle but the autoselect reads, whose low address byte is 0x00
+or 0x01, and the sector-erase confirm, whose address selects the
+sector). The stock driver writes its unlock cycles at 0x5555 and 0x2AAA
+and, if the chip's ID is not recognised that way, tries 0xAAA/0x555
+(Observed); either works on this part. An earlier version of this
+paragraph said only A10–A0 were decoded, which was wrong. There is no
+software sector protection on this part: protection needs high voltage
+on A9 or RESET#. (Datasheet; the firmware uses exactly these commands,
+Observed.)
 
 The stock firmware never issues chip erase, sector protect, unlock
-bypass or erase suspend. It verifies every sector erase by reading the
-sector back, retries erases and byte programs, and kicks the watchdog
-inside its erase and program loops (Observed). It also probes for a
-second flash chip at 0x18000000 before using 0x1C000000; whether
-0x18000000 is another alias of this chip on this board is not known
-(F1).
+bypass or erase suspend. It also probes for a second flash chip at
+0x18000000 before using 0x1C000000; whether 0x18000000 is another alias
+of this chip on this board is not known (F1).
+
+**Driver behaviour** (Observed in the code of sections A and B; counts
+exact, times from the loop constants):
+
+- **Byte program.** A byte that already reads as the target value is
+  not programmed. Otherwise unlock, 0xA0, data, then up to 299 status
+  reads (DQ7 against the target bit, DQ5 as the timeout flag) with a
+  short delay between them; then the byte is read back. The attempt
+  succeeds if the status poll succeeded and the byte reads back right,
+  or if it simply reads back right. Section A makes **9** attempts per
+  byte, section B **61**. Each failed attempt in A adds an event-log
+  entry naming the address, the current and the target value and
+  whether the poll timed out or the data mismatched; when the attempts
+  run out a "giving up" entry is logged and the error is returned. A
+  multi-byte write stops at the first byte that fails.
+- **Sector erase.** Unlock, 0x80, unlock, 0x30 at the sector; then up to
+  999 status polls, each followed by a delay (a busy loop of about
+  1.35 M iterations, or a 50-tick sleep when the scheduler runs and no
+  install is in progress); then the whole sector is read back. The
+  attempt succeeds if the status poll succeeded, or if the sector reads
+  back as all 0xFF; a bad read-back after a good poll is **not**
+  detected. Section A makes **3** attempts per sector, B **5**, with the
+  same "retrying" and "giving up" log entries. Every operation ends
+  with a reset command (unlock, 0xF0).
+- **The driver does not kick the watchdog**, and nothing kicks it during
+  an install: an earlier version of this paragraph said otherwise. The
+  installer in A, and B's likewise, **turns the watchdog off** before it
+  writes flash (system-control register 3 written with bit 7 clear,
+  [`peripherals.md`](peripherals.md) §5) and on again (bit 7 set) when
+  the install is over or refused, and raises the interrupt mask for the
+  whole install (Hypothesis for the mask: the call is not decoded with
+  certainty). The LED is blinked during an install straight from the
+  timer count. Outside an install (a compaction, a parameter save) the
+  flash runs with interrupts enabled and the timer tick's supervised
+  kick continues.
+- **When the retries run out.** The record writers (install and
+  compaction, format spec §5) ignore the driver's result and go on
+  writing the rest of the block. The installer's section writes are
+  different: each group (type 0, type 1, types 2 and above) is erased
+  and written again from the start until every erase and write in it
+  reports success, with no limit on the repeats, so a flash that fails
+  for good leaves the installer looping (Observed).
+- Length checks: writes and reads beyond the chip's size (0x100000,
+  from the ID table) are refused with their own error code; B refuses
+  to erase above 0xEFFFF in the application's area.
 
 ## 2. Map
 

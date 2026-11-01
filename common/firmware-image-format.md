@@ -520,14 +520,53 @@ so bytes +0x10 to +0x17 are `04 00 FB FF 10 00 EF FF` (Observed). Earlier
 versions of this document gave 0x0004 and 0x0010, a byte-order slip.
 Their meaning is not known (Hypothesis: the offsets of the image-header
 copy, +0x400, and the configuration store, +0x1000, in the block below).
-Section A checks all four pairs when validating a record; the boot
-selector was not seen to. Then comes a slot for the type 1 section at
-+0x20 and for the type 2 section at +0x30. Section A puts sections of
-higher types, if an image has any, in further slots from +0x40. Each
-slot is again `SIPURA *`, then the flash
-address of a section table entry at +0x08 and a check word at +0x0C. A
-slot is used only if the address is not 0xFFFFFFFF and the address OR the
-check word is 0xFFFFFFFF (so the check word is presumably the complement).
+Bytes +0x18 to +0x1F are never written (0xFF) and never read. Then comes
+a slot for the type 1 section at +0x20 and for the type 2 section at
++0x30. Section A puts sections of higher types, if an image has any, in
+further slots from +0x40. Each slot is again `SIPURA *`, then the flash
+address of a section table entry at +0x08 and a check word at +0x0C. Both
+installers write the address as 0x0C000000 plus the flash offset (so
+0x0C020000 for section B) and the check word as its complement
+(Observed). A slot is used by the boot selector only if the address is
+not 0xFFFFFFFF and the address OR the check word is 0xFFFFFFFF.
+
+**What each program checks in a record** (Observed in the code of all
+three programs; the selector's behaviour also Simulated, see below).
+
+- The **boot selector** checks only the 8-byte magic of each block. It
+  does not read the +0x0C complement, the +0x10/+0x14 pairs or bytes
+  +0x18 to +0x1F. With both magics present it takes the block with the
+  higher +0x08 word, compared **unsigned**, and **block 0 when they are
+  equal**. Then it checks the slot it uses as above (slot magic, address
+  not erased, address OR check word all ones) and the section the slot
+  points at (Section check below). Simulated: a record whose complement
+  is wrong and whose +0x10 to +0x17 bytes are zero is still chosen and
+  its slot followed; with equal sequence numbers the selector took block
+  0 whether block 0 or block 1 was the one without a type 2 slot; with
+  block 0 at 0xFFFFFFFF and block 1 at 0, block 0 was chosen.
+- **Sections A and B** (same code) compute six validity flags per block:
+  magic; +0x08 equal to the complement of +0x0C; the +0x14 pair; the
+  +0x10 pair; the type 2 slot's magic at +0x30; and the type 2 slot's
+  address at +0x38 equal to the complement of +0x3C. **The type 1 slot
+  is not checked.** Choosing the active block: a block whose two type 2
+  slot flags are clean beats one whose are not, whatever the sequence
+  numbers; otherwise a block whose other four flags are clean beats one
+  whose are not; otherwise the higher sequence number (compared
+  **signed**), and **block 1 when they are equal**. So the selector and
+  the application disagree on a tie, and disagree whenever the block
+  with the higher sequence number has no valid type 2 slot (the
+  selector takes it and ends up scanning; the application keeps the
+  other block as its configuration store). Whenever either block fails
+  any flag, or the chosen block's store has an error, the application
+  compacts at start-up: it rewrites the other block from the chosen one
+  (below). Simulated: with block 0 holding sequence 4 and both slots and
+  block 1 holding sequence 3 with an erased type 2 slot, the application
+  started normally, rewrote block 1 with sequence 5 and both slots, and
+  logged nothing; with equal sequence numbers and block 1 missing its
+  type 2 slot, the same; with both blocks complete it wrote nothing in
+  3.7 s. Section B, started by the selector on blocks of which the
+  higher one had no type 2 slot, wrote nothing to flash in 3 s, and a
+  further reset started B again.
 
 **Section check.** At a section table entry (§3) in flash:
 
@@ -570,6 +609,16 @@ step 2 says; this holds for both types.
    (offsets 0x4000–0x8630) and loop forever. No serial or network recovery
    was seen on this path.
 
+Up to the jump in step 4 the selector reads flash and RAM only: no
+on-chip register, the system-control device or port 0 is touched
+(Observed in the code; Simulated: about 1.8 M instructions from the
+reset vector with no other access). The eleven register writes the reset
+code makes before the selector are in
+[`peripherals.md`](../spa3000/peripherals.md) §7.1; port 0's data and
+direction registers are untouched until the started program writes them
+(§7.2 there), so a program started by the selector finds them as the
+hardware reset left them.
+
 Simulated: run black-box on flash images with sections A and B at the
 offsets section A uses, the selector follows this order. With a boot
 record, it starts A when A is valid and B when A fails any check (data
@@ -591,7 +640,15 @@ to the store and leave the record alone (Observed, Medium; an earlier
 reading said every save rewrote it). If section A starts with both
 boot-record blocks erased, it writes a record in sector 0 at start-up,
 and that record has **no section slots** (Simulated: the application on
-a board model; [`peripherals.md`](../spa3000/peripherals.md) §9). The
+a board model; [`peripherals.md`](../spa3000/peripherals.md) §9). It is
+the compaction below run on an erased block: `SIPURA *`, sequence
+number 0 (the erased word plus one), complement word **0xFFFFFFFF**
+(not a valid complement, so the application itself flags the record
+and compacts again at its next start), the `04 00 FB FF 10 00 EF FF`
+bytes, and 0xFF from +0x18 to +0x9F: every slot erased, including the
+type 1 slot. The header copy at +0x400 and the event log stay erased;
+the store holds one record (Observed in the code, Simulated byte for
+byte). The
 next start then goes through step 3 of the order above, and the type 1
 section, B, wins the scan. A record built from this section, with
 slots for B at 0x20000 and A at 0x50000, makes the selector start A
@@ -607,21 +664,44 @@ alternating 64 KB blocks:
 | Offset in block | Size | Content |
 |---|---|---|
 | 0x0000 | 0xA0 | Boot record (above) |
-| 0x0400 | 0x180 | The first *header size* (field 0x50) bytes of the installed image, that is its global header (0x80 bytes for the stock image), then 0xFF to the end of the area. The section table is not copied (Observed, both installers). |
-| 0x0800–0x0FFF | 32 × 0x40 | Event log, filled downwards from 0x0FC0. Each entry is a sequence number followed by a short text. Upgrades add entries naming the stage, the program doing the upgrade (application or recovery) and the new version. Section A also logs parameter-storage errors here. |
+| 0x0400 | 0x180 | The first *header size* (field 0x50) bytes of the installed image, that is its global header (0x80 bytes for the stock image), then 0xFF to the end of the area. The section table is not copied (Observed, both installers). A compaction copies only the first 0x80 bytes of the area (Observed, Simulated). Section B reads the version string at +0x45C (header field 0x5C) at start-up, if the byte there is not 0xFF, and otherwise uses a built-in string; nothing else reads the copy (Observed). So for a one-section image the area holds the image's 0x80-byte header followed by 0xFF, and any image whose version string is at header offset 0x5C satisfies section B. |
+| 0x0800–0x0FFF | 32 × 0x40 | Event log, filled downwards from 0x0FC0. Each entry is a sequence number followed by a short text. Upgrades add entries naming the stage, the program doing the upgrade (application or recovery) and the new version. Section A also logs parameter-storage errors here. When a block is rewritten (install or compaction) the log is **not copied verbatim**: the newest 16 entries (by slot position, from the last used slot upwards) are written into slots 0–15 of the new block (Observed; Simulated with 2 entries, which were copied). |
 | 0x1000–0x87FF | 0x7800 | Configuration store ([`flash.md`](../spa3000/flash.md) §4) |
 | 0x8800–0xFFFF | 0x7800 | Mirror of the configuration store. 0x1000–0xFFFF is copied across unchanged when only the record changes. |
 
-When both blocks hold a valid record, sections A and B use the one with
-the higher sequence number, and block 1 if the numbers are equal
-(Observed). What the boot selector does on a tie is not known.
+Which block sections A and B treat as active, and what the boot selector
+does on a tie, is under "What each program checks in a record" above:
+in short, the application prefers a block with a valid type 2 slot, then
+a block whose record is internally consistent, then the higher sequence
+number, and block 1 on a tie; the selector takes the higher sequence
+number and block 0 on a tie (Observed; Simulated).
 
-To update the record, either section chooses the active block, erases the
-other one and copies 0x1000–0xFFFF across. It then writes the header copy
-and the record, with the sequence number increased by one. The record's
-first byte is written last, so a block whose `SIPURA *` is incomplete is
-never taken as valid. Finally it marks that block as active. An install
-does this twice, so both blocks end up holding the new record.
+To update the record on an install, either section (same code in A and
+B, Observed) takes the active block, erases the other one, writes the
+newest 16 event-log entries into it, copies 0x1000–0xFFFF across
+unchanged in 0x100-byte pieces, then writes the header copy (0x180 bytes:
+the image's header-size bytes, then 0xFF), then record bytes +0x01 to
++0x9F, and the record's first byte last, so a block whose `SIPURA *` is
+incomplete is never taken as valid. The record written is the one read
+from the active block with the sequence number increased by one, its
+complement, and the `04 00 FB FF 10 00 EF FF` bytes rewritten; the slots
+from +0x30 upwards are first set to 0xFF and then filled for each type 2
+or higher section the image holds; the type 1 slot is rewritten only if
+the image holds a type 1 section (section A only), and otherwise kept
+as read. "Marking the block active" is a variable in RAM that the
+store code reads from then on; nothing in flash marks it (Observed).
+An install does this twice, so both blocks end up holding the new
+record and the one written second, the block that was active before
+the install, holds the higher number. The installers do not check the
+flash driver's result for any of these writes (Observed).
+
+A **compaction** (the store full, or a start-up with a block that fails
+a flag, [`flash.md`](../spa3000/flash.md) §4) differs: it erases the
+other block, writes the newest 16 log entries, rewrites every live
+parameter, copies each slot from +0x20 to +0x9F that begins with
+`SIPURA *` (so an erased slot stays erased and a valid one is kept, type
+1 included), copies the first 0x80 bytes of the header copy, and then
+writes the record as above, first byte last (Observed; Simulated).
 
 Flash layout implied so far (offsets in the 1 MB part):
 
@@ -706,6 +786,27 @@ type 2 section can run at all. So:
   record with only its type 1 slot, and an old application still in
   flash, starts B). This is a deliberate, reversible way into recovery
   mode from the stock web interface.
+**Rewriting the boot record from our own code** (facts from §5, for an
+image that changes the record to steer the next boot):
+
+- The selector follows the block with the higher sequence number as long
+  as its magic is intact, whatever the complement and the +0x10 to
+  +0x17 bytes hold, and takes block 0 on a tie. A record whose type 2
+  slot is erased sends it to the scan, which starts section B if B is
+  at a 64 KB boundary (§5, Order). Section B then leaves the blocks
+  alone, so repeated resets keep landing in B (Simulated).
+- The stock application, when it next runs on blocks one of which lacks
+  a valid type 2 slot or a correct complement or pair, rewrites that
+  block from the other at start-up with the next sequence number, and
+  logs nothing. So a record our code wrote is accepted as long as its
+  magic, complement, both halfword pairs and type 2 slot are right; if
+  they are not, the cost is one compaction (Observed; Simulated).
+- Keep the type 1 slot: the application never checks or rewrites it
+  outside an install of a type 1 section, and the selector needs it for
+  the fallback (§5).
+- The event log and the header copy may be copied verbatim: the stock
+  programs rewrite both when they next rewrite a block (§5).
+
 - Neither installer was seen to set a lower bound on where type 2 and
   higher sections are written. Section A places each at a 64 KB boundary
   counting down from 0xF0000, so a large enough set of sections would
@@ -901,9 +1002,9 @@ are being built from the instruction set manual in openmipsx's
 | Q3 | ~~Meaning of the 8 bytes before each deflate stream.~~ Answered: a flag and an alternative destination honoured by the decompression service (§4.3). | — |
 | Q4 | ~~Directory type 0x10, word 3.~~ Answered as far as it matters: the loader does not pass or check it and the service does not need it (§4.4). Its meaning is still unknown; values (0x1472, 0xC46, 0xD1D0, 0xCAAB, 0x16EA, 0x35A8, 0x4EB8, 0x2B1) are not the byte sum or either half of the CRC-32 of the uncompressed data. | — |
 | Q5 | ~~Does the loader ignore the "Varies" words in non-stream directory records?~~ Answered: yes (§4.4; Observed and Simulated). | — |
-| Q6 | Section C's embedded program is the boot selector: it checks and starts a type 2 or type 1 section from flash at 0x0C000000 (§5). The code at 0x0380 is the decompression service of §4.6. Sections A and B both write the boot records into flash sectors 0 and 1, with identical code; the +0x08 word is a sequence number increased on every write. Section A writes type 0 sections at flash 0xF2000, which confirms section C's placement. What section B does when started is in §5. All of these are answered. Still open: what runs before the boot selector; whether flash really repeats through the window (the boot selector's 0x0CFF2400 against flash offset 0xF2400); and the meaning of the record's +0x10 and +0x14 halfwords (0x0400 and
+| Q6 | Section C's embedded program is the boot selector: it checks and starts a type 2 or type 1 section from flash at 0x0C000000 (§5). The code at 0x0380 is the decompression service of §4.6. Sections A and B both write the boot records into flash sectors 0 and 1, with identical code; the +0x08 word is a sequence number increased on every write. Section A writes type 0 sections at flash 0xF2000, which confirms section C's placement. What section B does when started is in §5. All of these are answered. Still open: whether flash really repeats through the window (the boot selector's 0x0CFF2400 against flash offset 0xF2400; the installers write 0x0C000000-based slot addresses, the application's flash driver uses 0x1C000000, and the reset vector is 0x1CFFFF80, so the stock code relies on both aliases); and the meaning of the record's +0x10 and +0x14 halfwords (0x0400 and
 0x1000; Hypothesis: the offsets of the header copy and the configuration
-store). | Boot chain and recovery. |
+store). What runs before the boot selector is answered in `peripherals.md` §7.1 (the reset code's eleven register writes, then the selector). | Boot chain and recovery. |
 | Q7 | Mostly answered. Section B is a recovery image (§5, Section B). If the application fails its checks, the boot selector falls back to section B (from the decompilation, and **Simulated**: §5, Section C, Order). This needs section B intact at a 64 KB boundary the scan covers, or a valid type 1 slot in the boot record. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). Installing an image with no type 2 section, from either program, does clear the slot, and the unit then starts section B (§6, Simulated). An installed type 2 section that is empty or has a misaligned start stops the boot selector with no fallback (§6). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
 | Q8 | Is the format the same in other firmware versions? | Only 3.1.20(GW) has been examined. |
 | Q10 | **Install, then boot: unverified end to end.** On the board model both installers accepted a one-section image (§2) and wrote its section where §5 says (the application at a 64 KB boundary counting down from 0xF0000, section B packed to 4 bytes ending at 0xF0000), but what each did next was not what §5 and §7.2 describe: neither wrote a boot record or restarted, and both went on programming other sectors (section B after a sweep reading one byte every 64 KB through the whole address space, and over its own sector among others). Whether that is the firmware or a gap in the model's flash and bus behaviour is not decided, so neither "the unit then boots into the new section" nor "section B may erase itself when installing" is asserted. The boot selector does start the installed section from the flash the installers are described as leaving (Simulated, §5). | Whether an upgrade from stock firmware can be trusted, and whether section B is a safe recovery path. |
