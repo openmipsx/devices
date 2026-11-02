@@ -829,6 +829,12 @@ upgrader's behaviour:
 - If an admin password is set, the request must be authenticated. The
   device's web server uses HTTP Digest authentication (Observed; confirm
   on the wire).
+- The application's TFTP client (Measured, 2026-11-02): it requests the
+  URL's path with its leading slash (`/blink.bin`), octet mode, with
+  the RFC 2347 options `timeout` 5 and `tsize` 0, and completes the
+  transfer from a server that ignores the options and sends plain
+  512-byte blocks. With no admin password set, the upgrade request
+  needs no authentication.
 
 ### 7.1 Recovery protocol (section B)
 
@@ -922,6 +928,15 @@ B's (§5), but differs in what it accepts and writes:
 - **Afterwards.** It writes the boot record to both blocks, increases an
   install counter held in a parameter and logs the new version. The
   caller logs the outcome and restarts.
+  **Measured, 2026-11-02:** after fetching a one-section type 2 image of
+  about 7 KB (version 9.0.1, accepted) the unit went off the network at
+  once and showed no restart for 8 minutes: no ARP or HTTP, no answer
+  to recovery discovery, status LEDs dark. A power cycle then started
+  the new section. Whether the record was written is not known (the
+  selector would start the section through the record, or through its
+  scan if the record still named the old application, whose last
+  sector the install had erased). This matches Q10's board-model
+  observation as far as the restart.
 
 So a stock image upgrade can replace section B and the boot section,
 which section B itself never does.
@@ -1007,5 +1022,5 @@ are being built from the instruction set manual in openmipsx's
 store). What runs before the boot selector is answered in `peripherals.md` §7.1 (the reset code's eleven register writes, then the selector). | Boot chain and recovery. |
 | Q7 | Mostly answered. Section B is a recovery image (§5, Section B). If the application fails its checks, the boot selector falls back to section B (from the decompilation, and **Simulated**: §5, Section C, Order). This needs section B intact at a 64 KB boundary the scan covers, or a valid type 1 slot in the boot record. Section B brings up the network and accepts a new application over the multicast recovery protocol (§7.1), or fetches one using the stored upgrade rules. It never overwrites itself or the boot section. So the unit can be recovered over Ethernet as long as sectors 0–1, section B (at flash 0x20000) and section C are intact. A stock upgrade from the application can rewrite both section B and the boot section, so those are not untouchable (§7.2). The application has no way to restart into section B: the boot selector chooses only from flash, and section A never spoils its own slot (§7.2). Installing an image with no type 2 section, from either program, does clear the slot, and the unit then starts section B (§6, Simulated). An installed type 2 section that is empty or has a misaligned start stops the boot selector with no fallback (§6). An application that passes the boot checks and then hangs is therefore started every time. If both A and B are invalid, nothing was found: the boot selector loops forever. Still open: whether the reset button or anything that runs before the boot selector can force section B; and confirming the protocol on the wire. | Avoiding a permanently unusable unit. |
 | Q8 | Is the format the same in other firmware versions? | Only 3.1.20(GW) has been examined. |
-| Q10 | **Install, then boot: unverified end to end.** On the board model both installers accepted a one-section image (§2) and wrote its section where §5 says (the application at a 64 KB boundary counting down from 0xF0000, section B packed to 4 bytes ending at 0xF0000), but what each did next was not what §5 and §7.2 describe: neither wrote a boot record or restarted, and both went on programming other sectors (section B after a sweep reading one byte every 64 KB through the whole address space, and over its own sector among others). Whether that is the firmware or a gap in the model's flash and bus behaviour is not decided, so neither "the unit then boots into the new section" nor "section B may erase itself when installing" is asserted. The boot selector does start the installed section from the flash the installers are described as leaving (Simulated, §5). | Whether an upgrade from stock firmware can be trusted, and whether section B is a safe recovery path. |
+| Q10 | **Install, then boot: partly seen on the board (2026-11-02, §7.2).** The application installed a one-section image and did not restart on its own; a power cycle started the new section. Whether it wrote the record is not known. The rest stands: On the board model both installers accepted a one-section image (§2) and wrote its section where §5 says (the application at a 64 KB boundary counting down from 0xF0000, section B packed to 4 bytes ending at 0xF0000), but what each did next was not what §5 and §7.2 describe: neither wrote a boot record or restarted, and both went on programming other sectors (section B after a sweep reading one byte every 64 KB through the whole address space, and over its own sector among others). Whether that is the firmware or a gap in the model's flash and bus behaviour is not decided, so neither "the unit then boots into the new section" nor "section B may erase itself when installing" is asserted. The boot selector does start the installed section from the flash the installers are described as leaving (Simulated, §5). | Whether an upgrade from stock firmware can be trusted, and whether section B is a safe recovery path. |
 | Q9 | What are the stream regions at 0x1000 and 0x10000 in section A, which do not decode cleanly as code? Also: ~~is type 0x06 really r25?~~ yes (§4.4). Bit 30 of the entry record is partly answered: the jump ignores it (§4.4), but whether anything else reads it is unknown. | Load map correctness; whether they are second-core code, data or something else. |

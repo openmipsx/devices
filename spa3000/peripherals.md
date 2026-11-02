@@ -1,6 +1,7 @@
 # SPA3000 peripherals and start-up
 
-Status: draft, 2026-10-31. Dirty-side findings written as facts for the
+Status: draft, 2026-10-31; first Measured facts from our own code on the
+board added 2026-11-02 (§4, §5, §6). Dirty-side findings written as facts for the
 clean side. Contains no vendor code. See [`../clean-room.md`](../clean-room.md)
 for the process and the provenance rows of 2026-10-29 to 2026-10-31.
 
@@ -151,6 +152,13 @@ writes 0x20004010 (acknowledge), reads 0x2000400C and writes back
 in this board's mode (Hypothesis, strong: the handler's arithmetic is
 exact only then).
 
+**Measured, 2026-11-02** (our own code, mipsx-sdk `examples/blink`): a
+delay loop that waited for 0x2000400C to advance by 81,000,000 counted
+1.00 s by stopwatch (ten 2.000 s LED periods in 20 s), after only the
+three plain timer writes of §7.2 step 7 and with no interrupt enabled.
+So the counter runs from those writes alone, counts up, and at 81 MHz
+within the stopwatch's few per cent.
+
 ## 5. Watchdog
 
 - **Kick**: a low-then-high pulse on **0x2000402C bit 2**. The firmware
@@ -175,6 +183,11 @@ exact only then).
   5.03 s (Hypothesis, strong). Whether the watchdog runs before reg 3
   bit 7 is set is not known either. The boot code never writes reg 3 and
   never kicks (Simulated, from reset).
+- **Measured, 2026-11-02** (our own code, mipsx-sdk `examples/blink`
+  variant 1): a program that kicked as above at least once a second and
+  never wrote reg 3 ran for more than 10 minutes without a reset. So
+  either the watchdog is off until bit 7 is set, or the kick as
+  described satisfies it; which of the two is still open (P1).
 - **For our firmware**: kick at least every 2–3 s, half the firmware's
   own interval, and do not set reg 3 bit 7 until the kick is running. If
   the board resets anyway without our code ever setting the bit, the
@@ -213,6 +226,15 @@ The first write is data 0x67, then direction 0x67, at 0.108 s
 ([`hardware.md`](hardware.md) H4), and the simulated timing matches the
 board: the LEDs first light about half a second into start-up and then
 blink at 0.5 s.
+
+**Measured, 2026-11-02** (our own code, mipsx-sdk `examples/blink`): the
+two-step protocol of §3, with 0x20004028 = 0 before each access and
+none of the stock firmware's other system-control or on-chip start-up
+writes (§7.2 steps 3–6, 8, 9, 11), reached port 0: writing data then
+direction with only bit 3 set left D4, D7 and D8 dark, and toggling
+the data bit then blinked all three together, with D1 unaffected. So
+reg 4 and 5 are port 0 as described, bit 3 drives the three status
+LEDs through Q21, and nothing else needs setting up for it.
 
 ## 7. Start-up order
 
@@ -632,7 +654,7 @@ carry to and from the codecs:
 
 | # | Question | How to answer |
 |---|---|---|
-| P1 | The watchdog's timeout, and whether it runs before system-control reg 3 bit 7 is set | Our own code on the board: kick, then stop kicking for a measured time, with and without setting the bit |
+| P1 | The watchdog's timeout, and whether it runs before system-control reg 3 bit 7 is set. Narrowed 2026-11-02 (§5, Measured): kicking without setting the bit runs indefinitely, so the watchdog is off from reset or the kick works | Our own code on the board: kick, then stop kicking for a measured time, with and without setting the bit |
 | P2 | What 0x20004028 does | Board experiments once our code runs |
 | P3 | Real timing of the DMA columns, the 0x8200 engine and the counters at 0x2000E014 and 0x2000F0A8 | Board, logic analyser |
 | P4 | Which system-control bits are which PLL strap, and what the other board modes change | Board, or a reading taken in reset |
